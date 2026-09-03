@@ -19,6 +19,7 @@ use memory_kernel::storage::move_kernel::{
     MovePlan,
     MoveReferences,
     MoveResult,
+    MoveSetPlan,
 };
 use uuid::Uuid;
 
@@ -122,6 +123,17 @@ impl MoveDomain for AuditMoveDomain<'_> {
 }
 
 impl RepositoryIndex {
+    /// Build one normalized preflight plan for a set of audit entities.
+    pub fn plan_move_set(
+        &self,
+        audit_entity_ids: &[Uuid],
+        target_workspace_root: &Path,
+    ) -> Result<MoveSetPlan, AuditError> {
+        let domain = AuditMoveDomain::new(self);
+        move_kernel::plan_move_set(&domain, audit_entity_ids, target_workspace_root)
+            .map_err(from_move_error)
+    }
+
     /// Build a read-only preflight plan for an audit entity move.
     ///
     /// Audit has no folder-per-entity records today, so the returned plan is

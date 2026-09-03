@@ -28,6 +28,7 @@ rule-api = { git = "https://github.com/mankinskin/rule", branch = "main" }
 session-api = { git = "https://github.com/mankinskin/session", branch = "main" }
 
 [dev-dependencies]
+memory-kernel = { git = "https://github.com/mankinskin/memory-kernel", branch = "main", features = ["testing"] }
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 

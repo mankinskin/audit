@@ -37,56 +37,30 @@
 //! No fabricated percentiles: only Criterion's own sample statistics are
 //! reported.
 
-use std::{
-    fs,
-    path::{
-        Path,
-        PathBuf,
-    },
-    process::Command,
-};
+use std::{fs, path::PathBuf};
 
 use audit_api::index::RepositoryIndex;
-use criterion::{
-    Criterion,
-    criterion_group,
-    criterion_main,
-};
-use memory_kernel::storage::move_kernel::MoveBlocker;
-use tempfile::TempDir;
+use criterion::{Criterion, criterion_group, criterion_main};
+use memory_kernel::{storage::move_kernel::MoveBlocker, testing::MoveBenchmarkWorkspace};
 use uuid::Uuid;
 
 const AUDIT_INDEX_DIR: &str = ".audit";
-
-fn git_init(repo_root: &Path) {
-    let status = Command::new("git")
-        .current_dir(repo_root)
-        .arg("init")
-        .status()
-        .expect("run git init");
-    assert!(status.success(), "git init failed");
-}
 
 /// One isolated source+target workspace pair with an initialized (but
 /// necessarily entity-empty) audit index, and `background_count` unrelated
 /// files written into the source workspace to vary total workspace size
 /// independent of the (always absent) audit entity set.
 fn build_audit_fixture(
+    workspace: &MoveBenchmarkWorkspace,
     background_count: usize,
-) -> (TempDir, RepositoryIndex, PathBuf) {
-    let workspace_dir = tempfile::tempdir().expect("tempdir");
-    let repo = workspace_dir.path().join("repo");
-    fs::create_dir_all(&repo).expect("create repo dir");
-    git_init(&repo);
-
-    let source_workspace = repo.join("source");
-    let target_workspace = repo.join("target");
-    fs::create_dir_all(&source_workspace).expect("create source workspace");
+) -> (RepositoryIndex, PathBuf) {
+    workspace.reset();
+    let source_workspace = workspace.source_root();
+    let target_workspace = workspace.target_root().to_path_buf();
     fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR))
         .expect("create target audit index dir");
 
-    let index =
-        RepositoryIndex::init(&source_workspace).expect("init audit index");
+    let index = RepositoryIndex::init(&source_workspace).expect("init audit index");
 
     for offset in 0..background_count {
         fs::write(
@@ -96,15 +70,12 @@ fn build_audit_fixture(
         .expect("write background file");
     }
 
-    (workspace_dir, index, target_workspace)
+    (index, target_workspace)
 }
 
 /// Assert that a preflight plan for a synthetic (never-persisted) audit
 /// entity id is fail-closed, per the domain's documented contract.
-fn assert_fail_closed(
-    entity_id: &Uuid,
-    plan: &memory_kernel::storage::move_kernel::MovePlan,
-) {
+fn assert_fail_closed(entity_id: &Uuid, plan: &memory_kernel::storage::move_kernel::MovePlan) {
     assert!(
         !plan.supported(),
         "audit preflight unexpectedly supported for synthetic id {entity_id}: {:?}",
@@ -124,7 +95,8 @@ fn assert_fail_closed(
 // --- Fail-closed preflight, fixed workspace size ---
 
 fn bench_audit_move_preflight_fail_closed(c: &mut Criterion) {
-    let (_workspace_dir, index, target_workspace) = build_audit_fixture(0);
+    let workspace = MoveBenchmarkWorkspace::new();
+    let (index, target_workspace) = build_audit_fixture(&workspace, 0);
     let entity_id = Uuid::new_v4();
     c.bench_function("audit_move_preflight_fail_closed", |b| {
         b.iter(|| {
@@ -145,13 +117,11 @@ fn bench_audit_move_preflight_fail_closed(c: &mut Criterion) {
 
 fn bench_audit_move_preflight_by_background_size(c: &mut Criterion) {
     for &background_count in &[0usize, 100, 500] {
-        let (_workspace_dir, index, target_workspace) =
-            build_audit_fixture(background_count);
+        let workspace = MoveBenchmarkWorkspace::new();
+        let (index, target_workspace) = build_audit_fixture(&workspace, background_count);
         let entity_id = Uuid::new_v4();
         c.bench_function(
-            &format!(
-                "audit_move_preflight_fail_closed_background_{background_count}files"
-            ),
+            &format!("audit_move_preflight_fail_closed_background_{background_count}files"),
             |b| {
                 b.iter(|| {
                     let plan = index
@@ -165,9 +135,32 @@ fn bench_audit_move_preflight_by_background_size(c: &mut Criterion) {
     }
 }
 
+fn bench_audit_move_set_preflight_fail_closed(c: &mut Criterion) {
+    let workspace = MoveBenchmarkWorkspace::new();
+    let (index, target_workspace) = build_audit_fixture(&workspace, 0);
+    let entity_ids = (0..10).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
+    c.bench_function("audit_move_set_preflight_fail_closed", |b| {
+        b.iter(|| {
+            let plan = index
+                .plan_move_set(&entity_ids, &target_workspace)
+                .expect("plan move set");
+            assert!(!plan.supported());
+            assert_eq!(plan.entity_plans.len(), entity_ids.len());
+            criterion::black_box(plan);
+        });
+    });
+}
+
+fn criterion_config() -> Criterion {
+    memory_kernel::testing::move_bench_criterion()
+}
+
 criterion_group!(
-    move_health,
+    name = move_health;
+    config = criterion_config();
+    targets =
     bench_audit_move_preflight_fail_closed,
     bench_audit_move_preflight_by_background_size,
+    bench_audit_move_set_preflight_fail_closed
 );
 criterion_main!(move_health);
