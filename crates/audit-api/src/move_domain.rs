@@ -86,6 +86,13 @@ impl MoveDomain for AuditMoveDomain<'_> {
         Ok(None)
     }
 
+    fn source_entity_paths_for_set(
+        &self,
+        _entity_ids: &[Uuid],
+    ) -> MoveResult<std::collections::BTreeMap<Uuid, PathBuf>> {
+        Ok(std::collections::BTreeMap::new())
+    }
+
     fn related_entities(
         &self,
         _entity_id: &Uuid,
