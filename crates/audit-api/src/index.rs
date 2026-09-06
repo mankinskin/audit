@@ -56,7 +56,10 @@ impl RepositoryIndex {
             )));
         }
 
-        let db_path = repo_root.join(INDEX_DIR).join(INDEX_DB);
+        let index_dir = memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
+            repo_root, INDEX_DIR,
+        );
+        let db_path = index_dir.join(INDEX_DB);
         if !db_path.is_file() {
             return Err(AuditError::WorkspaceNotFound {
                 path: format_output_path(repo_root),
@@ -82,7 +85,9 @@ impl RepositoryIndex {
             )));
         }
 
-        let index_dir = repo_root.join(INDEX_DIR);
+        let index_dir = memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
+            repo_root, INDEX_DIR,
+        );
         fs::create_dir_all(&index_dir)?;
         ensure_index_gitignore(&index_dir, INDEX_DB)?;
         let db_path = index_dir.join(INDEX_DB);

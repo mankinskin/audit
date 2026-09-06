@@ -1,14 +1,21 @@
 //! Audit-domain adapter onto the domain-neutral move kernel.
 //!
-//! The audit store is currently a repository-level SQLite index plus generated
-//! catalog artifacts, not a folder-per-entity store. This adapter is therefore
-//! intentionally fail-closed: callers can use the shared kernel preflight shape,
-//! but no audit entity can be moved until audit introduces persisted entity
-//! folders.
+//! The audit store is primarily a repository-level SQLite index plus generated
+//! catalog artifacts (`.audit/README.md`, `.audit/index.toon`), neither of
+//! which is an entity-folder record and neither of which is ever moveable
+//! through this adapter. Alongside that repository-level index, a finding may
+//! additionally be persisted as an entity folder under
+//! `.audit/findings/<uuid>/` (see [`crate::finding_entity`]); only such
+//! persisted findings resolve a source path here. Every other id — including
+//! any id addressing only the repository-level SQLite index or catalog
+//! artifacts — remains fail-closed via `MissingSourceEntity`.
 
-use std::path::{
-    Path,
-    PathBuf,
+use std::{
+    collections::BTreeMap,
+    path::{
+        Path,
+        PathBuf,
+    },
 };
 
 use memory_kernel::storage::move_kernel::{
@@ -25,11 +32,12 @@ use uuid::Uuid;
 
 use crate::{
     error::AuditError,
+    finding_entity::FINDING_ENTITY_SUBDIR,
     index::RepositoryIndex,
 };
 
 const AUDIT_INDEX_DIR: &str = ".audit";
-const AUDIT_ENTITY_DIR: &str = "findings";
+const AUDIT_ENTITY_DIR: &str = FINDING_ENTITY_SUBDIR;
 
 fn to_move_error(error: AuditError) -> MoveError {
     match error {
@@ -81,16 +89,23 @@ impl MoveDomain for AuditMoveDomain<'_> {
 
     fn source_entity_path(
         &self,
-        _entity_id: &Uuid,
+        entity_id: &Uuid,
     ) -> MoveResult<Option<PathBuf>> {
-        Ok(None)
+        Ok(self.index.finding_entity_path(entity_id))
     }
 
     fn source_entity_paths_for_set(
         &self,
-        _entity_ids: &[Uuid],
-    ) -> MoveResult<std::collections::BTreeMap<Uuid, PathBuf>> {
-        Ok(std::collections::BTreeMap::new())
+        entity_ids: &[Uuid],
+    ) -> MoveResult<BTreeMap<Uuid, PathBuf>> {
+        Ok(entity_ids
+            .iter()
+            .filter_map(|entity_id| {
+                self.index
+                    .finding_entity_path(entity_id)
+                    .map(|path| (*entity_id, path))
+            })
+            .collect())
     }
 
     fn related_entities(
@@ -109,10 +124,13 @@ impl MoveDomain for AuditMoveDomain<'_> {
 
     fn entity_indexed_in(
         &self,
-        _store_root: &Path,
-        _entity_id: &Uuid,
+        store_root: &Path,
+        entity_id: &Uuid,
     ) -> MoveResult<bool> {
-        Ok(false)
+        Ok(store_root
+            .join(AUDIT_ENTITY_DIR)
+            .join(entity_id.to_string())
+            .is_dir())
     }
 
     fn scan_store(
@@ -225,5 +243,127 @@ mod tests {
             blocker,
             MoveBlocker::MissingSourceEntity { entity_id } if *entity_id == audit_entity_id
         )), "expected missing source entity blocker: {:?}", plan.blockers);
+    }
+
+    fn digest_file(path: &Path) -> String {
+        use sha2::{Digest, Sha256};
+        let bytes = std::fs::read(path).unwrap();
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        format!("{:x}", hasher.finalize())
+    }
+
+    fn persist_sample_finding(index: &RepositoryIndex, id: Uuid) -> PathBuf {
+        use crate::{finding_entity::PersistedFinding, models::Severity};
+        let finding = PersistedFinding {
+            id,
+            category: "file-length".to_string(),
+            severity: Severity::Medium,
+            summary: "file too long".to_string(),
+            path: Some("src/lib.rs".to_string()),
+            line: None,
+            metric_name: "line_count".to_string(),
+            metric_value: serde_json::json!(500),
+            threshold: Some(serde_json::json!(400)),
+            instructions: vec!["split the file".to_string()],
+            evidence: serde_json::json!({"lines": 500}),
+        };
+        index.persist_finding_entity(&finding).unwrap()
+    }
+
+    #[test]
+    fn audit_move_round_trips_entity_folder_finding_via_apply_and_rollback() {
+        let temp = tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        run_git(&repo, &["init"]);
+
+        let source_workspace = repo.join("source");
+        let target_workspace = repo.join("target");
+        std::fs::create_dir_all(&source_workspace).unwrap();
+        std::fs::create_dir_all(&target_workspace).unwrap();
+        RepositoryIndex::init(&target_workspace).unwrap();
+
+        let source_index = RepositoryIndex::init(&source_workspace).unwrap();
+        let finding_id = Uuid::new_v4();
+        let source_dir = persist_sample_finding(&source_index, finding_id);
+        let original_digest = digest_file(&source_dir.join("finding.json"));
+
+        // An unrelated finding must be preserved untouched by the move.
+        let unrelated_id = Uuid::new_v4();
+        let unrelated_dir =
+            persist_sample_finding(&source_index, unrelated_id);
+        let unrelated_digest = digest_file(&unrelated_dir.join("finding.json"));
+
+        let plan = source_index
+            .plan_move_preflight(&finding_id, &target_workspace)
+            .unwrap();
+        assert!(plan.supported(), "expected supported plan: {:?}", plan.blockers);
+
+        let outcome = source_index.execute_move_with_journal(&plan).unwrap();
+        assert!(!source_dir.exists(), "source folder should be moved away");
+        assert!(
+            plan.destination_entity_path.join("finding.json").is_file(),
+            "destination folder should hold the moved finding"
+        );
+        assert_eq!(
+            digest_file(&plan.destination_entity_path.join("finding.json")),
+            original_digest,
+            "moved content must be byte-identical"
+        );
+
+        // Unrelated entity untouched.
+        assert!(unrelated_dir.is_dir());
+        assert_eq!(digest_file(&unrelated_dir.join("finding.json")), unrelated_digest);
+
+        let rollback = source_index
+            .rollback_move_with_journal(outcome.journal.id)
+            .unwrap();
+        assert!(rollback.rolled_back);
+        assert!(source_dir.join("finding.json").is_file());
+        assert_eq!(
+            digest_file(&source_dir.join("finding.json")),
+            original_digest,
+            "rollback must restore the original checksum"
+        );
+        assert!(!plan.destination_entity_path.exists());
+    }
+
+    #[test]
+    fn audit_move_rejects_repository_level_only_layout() {
+        let temp = tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        std::fs::create_dir_all(&repo).unwrap();
+        run_git(&repo, &["init"]);
+
+        let source_workspace = repo.join("source");
+        let target_workspace = repo.join("target");
+        std::fs::create_dir_all(&source_workspace).unwrap();
+        std::fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR))
+            .unwrap();
+
+        let index = RepositoryIndex::init(&source_workspace).unwrap();
+        // Simulate the repository-level catalog artifacts; neither is an
+        // entity folder and neither must ever resolve a source path.
+        std::fs::write(
+            source_workspace.join(AUDIT_INDEX_DIR).join("README.md"),
+            "generated",
+        )
+        .unwrap();
+        std::fs::write(
+            source_workspace.join(AUDIT_INDEX_DIR).join("index.toon"),
+            "generated",
+        )
+        .unwrap();
+
+        let repository_level_id = Uuid::new_v4();
+        let plan = index
+            .plan_move_preflight(&repository_level_id, &target_workspace)
+            .unwrap();
+        assert!(!plan.supported());
+        assert!(plan.blockers.iter().any(|blocker| matches!(
+            blocker,
+            MoveBlocker::MissingSourceEntity { entity_id } if *entity_id == repository_level_id
+        )));
     }
 }

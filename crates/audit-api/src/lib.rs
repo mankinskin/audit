@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod config;
 pub mod error;
+pub mod finding_entity;
 pub mod index;
 mod index_helpers;
 pub mod models;

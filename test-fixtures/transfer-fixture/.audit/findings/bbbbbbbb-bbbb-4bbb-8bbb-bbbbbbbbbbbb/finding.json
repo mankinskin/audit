@@ -1,0 +1,17 @@
+{
+  "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  "category": "file-length",
+  "severity": "medium",
+  "summary": "transfer-fixture finding used by audit_transfer_contract_temporary_root_parity",
+  "path": "src/lib.rs",
+  "line": null,
+  "metric_name": "line_count",
+  "metric_value": 500,
+  "threshold": 400,
+  "instructions": [
+    "split the file"
+  ],
+  "evidence": {
+    "lines": 500
+  }
+}

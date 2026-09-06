@@ -74,6 +74,132 @@ fn move_plans_blocked_when_audit_entity_has_no_folder() {
     }
 }
 
+fn persist_sample_finding(index: &RepositoryIndex, id: Uuid) {
+    use audit_api::{finding_entity::PersistedFinding, models::Severity};
+    let finding = PersistedFinding {
+        id,
+        category: "file-length".to_string(),
+        severity: Severity::Medium,
+        summary: "file too long".to_string(),
+        path: Some("src/lib.rs".to_string()),
+        line: None,
+        metric_name: "line_count".to_string(),
+        metric_value: serde_json::json!(500),
+        threshold: Some(serde_json::json!(400)),
+        instructions: vec!["split the file".to_string()],
+        evidence: serde_json::json!({"lines": 500}),
+    };
+    index.persist_finding_entity(&finding).unwrap();
+}
+
+#[test]
+fn move_applies_resumes_and_rolls_back_entity_folder_finding() {
+    let temp = tempdir().unwrap();
+    let repo_root = temp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    std::process::Command::new("git")
+        .current_dir(&repo_root)
+        .args(["init"])
+        .status()
+        .expect("git init")
+        .success()
+        .then_some(())
+        .expect("git init failed");
+
+    let target_workspace = repo_root.join("target-workspace");
+    std::fs::create_dir_all(&target_workspace).unwrap();
+    RepositoryIndex::init(&target_workspace).unwrap();
+
+    let index = RepositoryIndex::init(&repo_root).unwrap();
+    let finding_id = Uuid::new_v4();
+    persist_sample_finding(&index, finding_id);
+
+    let cli = parse_cli_from([
+        "audit",
+        "--json",
+        "move",
+        &finding_id.to_string(),
+        "--repo-root",
+        repo_root.to_string_lossy().as_ref(),
+        "--to-workspace-root",
+        target_workspace.to_string_lossy().as_ref(),
+    ])
+    .expect("parse move apply");
+
+    let journal_id = match run(cli).expect("run move apply") {
+        CliOutput::Machine(value, _) => {
+            assert_eq!(value["status"], "ok");
+            assert_eq!(value["mode"], "execute");
+            let journal_id = value["outcome"]["journal"]["id"]
+                .as_str()
+                .expect("journal id")
+                .to_string();
+            journal_id
+        },
+        other => panic!("unexpected output: {other:?}"),
+    };
+
+    let rollback_cli = parse_cli_from([
+        "audit",
+        "--json",
+        "move",
+        "--repo-root",
+        repo_root.to_string_lossy().as_ref(),
+        "--rollback",
+        &journal_id,
+    ])
+    .expect("parse move rollback");
+
+    match run(rollback_cli).expect("run move rollback") {
+        CliOutput::Machine(value, _) => {
+            assert_eq!(value["status"], "ok");
+            assert_eq!(value["mode"], "rollback");
+        },
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+#[test]
+fn move_rejects_unsupported_repository_level_layout_with_dry_run() {
+    let temp = tempdir().unwrap();
+    let repo_root = temp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    std::process::Command::new("git")
+        .current_dir(&repo_root)
+        .args(["init"])
+        .status()
+        .expect("git init")
+        .success()
+        .then_some(())
+        .expect("git init failed");
+
+    let target_workspace = repo_root.join("target-workspace");
+    std::fs::create_dir_all(target_workspace.join(".audit")).unwrap();
+    RepositoryIndex::init(&repo_root).unwrap();
+
+    let repository_level_id = Uuid::new_v4();
+    let cli = parse_cli_from([
+        "audit",
+        "--json",
+        "move",
+        &repository_level_id.to_string(),
+        "--repo-root",
+        repo_root.to_string_lossy().as_ref(),
+        "--to-workspace-root",
+        target_workspace.to_string_lossy().as_ref(),
+        "--dry-run",
+    ])
+    .expect("parse move dry-run");
+
+    match run(cli).expect("run move dry-run") {
+        CliOutput::Machine(value, _) => {
+            assert_eq!(value["status"], "blocked");
+            assert_eq!(value["dry_run"], true);
+        },
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
 #[test]
 fn parses_run_session_selector_flags() {
     let cli = parse_cli_from([
