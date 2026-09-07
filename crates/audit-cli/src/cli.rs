@@ -452,16 +452,6 @@ fn run_session_audit(
         .session_store_root
         .clone()
         .unwrap_or_else(|| repo_root.join(".session"));
-    let workspace_slug = args
-        .session_workspace_slug
-        .clone()
-        .or_else(|| {
-            repo_root
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .unwrap_or_else(|| "workspace".to_string());
-
     let selector = if args.latest_session {
         SessionAuditSelector::Latest
     } else if let Some(session_id) = args.session_id.clone() {
@@ -473,7 +463,7 @@ fn run_session_audit(
         ));
     };
 
-    let store = SessionStoreConfig::new(store_root, workspace_slug);
+    let store = SessionStoreConfig::new(store_root);
     Ok(store.session_audit(selector)?)
 }
 
@@ -622,7 +612,7 @@ fn render_session_audit_human(report: &SessionAuditReport) -> String {
     lines.push(format!("Session: {}", report.session_id));
     lines.push(format!("Schema version: {}", report.schema_version));
     lines.push(format!("Source: {}", report.source));
-    lines.push(format!("Workspace: {}", report.workspace_slug));
+    lines.push(format!("Workspace: {}", report.workspace_path));
     lines.push(format!("Captured at: {}", report.captured_at));
     lines.push(format!(
         "Turns: {} (assistant {}, empty assistant {})",

@@ -237,11 +237,11 @@ fn run_latest_session_emits_session_audit_payload() {
     let repo_root = temp.path().join("repo");
     std::fs::create_dir_all(&repo_root).unwrap();
     let store_root = repo_root.join(".session");
-    let store = SessionStoreConfig::new(&store_root, "repo");
+    let store = SessionStoreConfig::new(&store_root);
 
     let payload = CopilotHookPayload {
         session_id: "session-cli".to_string(),
-        workspace_slug: "repo".to_string(),
+        workspace_path: "repo".to_string(),
         captured_at: chrono::Utc::now(),
         conversation_id: Some("conv-1".to_string()),
         agent_id: Some("copilot".to_string()),
@@ -274,12 +274,17 @@ fn run_latest_session_emits_session_audit_payload() {
         "repo",
     ])
     .expect("parse run latest-session");
+    let expected_workspace_path =
+        repo_root.to_string_lossy().replace('\\', "/");
 
     match run(cli).expect("run latest-session") {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["session_id"], "session-cli");
             assert!(value["schema_version"].as_u64().unwrap_or(0) >= 1);
-            assert_eq!(value["workspace_slug"], "repo");
+            assert_eq!(
+                value["workspace_path"],
+                expected_workspace_path
+            );
         },
         other => panic!("unexpected output: {other:?}"),
     }

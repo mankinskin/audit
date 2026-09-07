@@ -22,6 +22,7 @@ use crate::{
         cargo_quality,
         file_length,
         rule_overlap,
+        repository_guidance,
         session_workflow_graph,
         spec_fulfillment,
         static_metrics,
@@ -69,6 +70,8 @@ pub fn audit(
     let session_workflow_graph_result =
         session_workflow_graph::evaluate(&repo_root);
     let rule_overlap_result = rule_overlap::evaluate(&repo_root);
+    let repository_guidance_result =
+        repository_guidance::evaluate(&repo_root);
 
     let mut findings = file_length_result.findings;
     findings.extend(static_metrics_result.findings);
@@ -79,6 +82,7 @@ pub fn audit(
     findings.extend(ticket_graph_result.findings);
     findings.extend(session_workflow_graph_result.findings);
     findings.extend(rule_overlap_result.findings);
+    findings.extend(repository_guidance_result.findings);
 
     let total_lines = indexed_files.iter().map(|file| file.line_count).sum();
     let metrics = AuditMetrics {
@@ -93,6 +97,7 @@ pub fn audit(
         ticket_graph: ticket_graph_result.metric,
         session_workflow_graph: session_workflow_graph_result.metric,
         rule_overlap: rule_overlap_result.metric,
+        repository_guidance: repository_guidance_result.metric,
     };
 
     let finished_at = Utc::now();

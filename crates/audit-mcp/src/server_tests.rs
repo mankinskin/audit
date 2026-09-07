@@ -5,10 +5,39 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use super::{
+    AuditRepositoryInput,
     AuditMoveInput,
     AuditMoveJournalInput,
     AuditServer,
 };
+
+#[tokio::test]
+async fn audit_exposes_repository_guidance_findings() {
+    let tmp = TempDir::new().expect("tempdir");
+    std::fs::write(tmp.path().join("README.md"), "# Repo\n")
+        .expect("write readme");
+    std::fs::write(tmp.path().join("INSTALL.md"), " \n")
+        .expect("write install");
+
+    let server = AuditServer::new(tmp.path().to_path_buf());
+    let result = server
+        .audit(Parameters(AuditRepositoryInput {
+            repo_root: Some(tmp.path().to_path_buf()),
+            max_file_lines: None,
+            max_cyclomatic_complexity: None,
+            coverage_warn_below: None,
+        }))
+        .await
+        .expect("audit");
+    let json = extract_json(result);
+
+    assert!(json["findings"].as_array().unwrap().iter().any(|finding| {
+        finding["id"] == "repository_guidance:empty:INSTALL.md"
+    }));
+    assert!(json["findings"].as_array().unwrap().iter().any(|finding| {
+        finding["id"] == "repository_guidance:missing:CONTRIBUTING.md"
+    }));
+}
 
 fn run_git(
     repo_root: &std::path::Path,

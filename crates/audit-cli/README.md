@@ -11,6 +11,11 @@ Use `audit` when you need repository quality metrics and grouped findings from t
 - `run`: execute a full audit and return metrics, thresholds, and actionable findings.
 - `summary`: regroup findings by crate, category, severity, metric, or path.
 
+`run` includes repository-guidance findings when the repository root is
+missing or has a whitespace-empty `README.md`, `INSTALL.md`, or
+`CONTRIBUTING.md`. A present non-empty file passes the initial structural
+check without semantic content validation.
+
 Global options:
 
 - `--json`: emit machine-readable output instead of the human summary.

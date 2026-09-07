@@ -160,6 +160,8 @@ pub struct RuleOverlapSummary {
     pub details: Option<String>,
 }
 
+pub use crate::trials::repository_guidance::RepositoryGuidanceMetric;
+
 impl RuleOverlapSummary {
     pub fn unavailable(details: impl Into<String>) -> Self {
         Self {
@@ -232,6 +234,7 @@ pub struct AuditMetrics {
     pub ticket_graph: CountMetric,
     pub session_workflow_graph: CountMetric,
     pub rule_overlap: RuleOverlapSummary,
+    pub repository_guidance: RepositoryGuidanceMetric,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

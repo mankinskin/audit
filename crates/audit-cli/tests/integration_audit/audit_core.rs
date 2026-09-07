@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 
 use audit_api::{
     audit::audit,
@@ -14,6 +15,55 @@ use rusqlite::{
 use tempfile::tempdir;
 
 use super::fixtures::write_sample_repo;
+
+fn copy_fixture(
+    fixture_name: &str,
+) -> tempfile::TempDir {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/repository-guidance")
+        .join(fixture_name);
+    let destination = tempdir().expect("fixture temp repo");
+
+    for entry in fs::read_dir(source).expect("read fixture") {
+        let entry = entry.expect("fixture entry");
+        if !entry.file_type().expect("fixture entry type").is_file() {
+            continue;
+        }
+        fs::copy(entry.path(), destination.path().join(entry.file_name()))
+            .expect("copy fixture file");
+    }
+
+    destination
+}
+
+#[test]
+fn audit_reports_repository_guidance() {
+    let missing = copy_fixture("missing-files");
+    let missing_report = audit(missing.path(), AuditConfig::default())
+        .expect("missing guidance audit succeeds");
+
+    assert!(missing_report.findings.iter().any(|finding| {
+        finding.id == "repository_guidance:empty:INSTALL.md"
+    }));
+    assert!(missing_report.findings.iter().any(|finding| {
+        finding.id == "repository_guidance:missing:CONTRIBUTING.md"
+    }));
+    assert_eq!(
+        missing_report.metrics.repository_guidance.missing_files,
+        1
+    );
+    assert_eq!(missing_report.metrics.repository_guidance.empty_files, 1);
+
+    let complete = copy_fixture("complete-files");
+    let complete_report = audit(complete.path(), AuditConfig::default())
+        .expect("complete guidance audit succeeds");
+
+    assert!(complete_report
+        .findings
+        .iter()
+        .all(|finding| finding.category != "repository_guidance"));
+    assert_eq!(complete_report.metrics.repository_guidance.present_files, 3);
+}
 
 #[test]
 fn audit_collects_findings_and_prunes_stale_index_entries() {
