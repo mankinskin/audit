@@ -218,6 +218,9 @@ pub fn run(cli: AuditCli) -> Result<CliOutput, CliRunError> {
                 }
             } else {
                 let report = run_audit(&args)?;
+                if report.metrics.markdown_links.blocking_findings > 0 {
+                    return Err(CliRunError::BrokenLinks(blocking_link_details(&report)));
+                }
                 if let Some(format) = machine_output_format(cli.json, cli.toon) {
                     Ok(CliOutput::Machine(json!(report), format))
                 } else {
@@ -437,33 +440,57 @@ fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput
         None => CliOutput::Text(render_link_check_human(&payload)),
     };
 
-    if result.metric.broken_links > 0 {
-        let details = result
-            .findings
-            .iter()
-            .map(|finding| {
-                format!(
-                    "{}:{}: {}",
-                    finding.path.as_deref().unwrap_or("<unknown>"),
-                    finding.line.unwrap_or_default(),
-                    finding.summary
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        return Err(CliRunError::BrokenLinks(details));
+    if result.metric.blocking_findings > 0 {
+        if let CliOutput::Machine(value, format) = &output {
+            if let Ok(rendered) = render_machine_output(value, *format) {
+                println!("{rendered}");
+            }
+        } else if let CliOutput::Text(text) = &output {
+            println!("{text}");
+        }
+
+        return Err(CliRunError::BrokenLinks(blocking_link_details_from_findings(
+            &result.findings,
+        )));
     }
 
     Ok(output)
 }
 
+fn blocking_link_details(report: &AuditReport) -> String {
+    blocking_link_details_from_findings(&report.findings)
+}
+
+fn blocking_link_details_from_findings(findings: &[audit_api::models::AuditFinding]) -> String {
+    findings
+        .iter()
+        .filter(|finding| {
+            finding.metric_name == "markdown_link_coherence"
+                && finding.category
+                    != audit_api::trials::markdown_links::LinkClass::CrossRepository.category()
+        })
+        .map(|finding| {
+            format!(
+                "[{}] {}:{}: {} (id={})",
+                finding.category,
+                finding.path.as_deref().unwrap_or("<unknown>"),
+                finding.line.unwrap_or_default(),
+                finding.summary,
+                finding.id,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn render_link_check_human(payload: &Value) -> String {
     let metric = &payload["metric"];
     format!(
-        "Markdown links: {} files, {} checked, {} broken, {} skipped",
+        "Markdown links: {} files, {} checked, {} broken, {} blocking, {} skipped",
         metric["markdown_files"].as_u64().unwrap_or_default(),
         metric["links_checked"].as_u64().unwrap_or_default(),
         metric["broken_links"].as_u64().unwrap_or_default(),
+        metric["blocking_findings"].as_u64().unwrap_or_default(),
         metric["skipped_links"].as_u64().unwrap_or_default()
     )
 }
@@ -601,10 +628,11 @@ fn render_human(report: &AuditReport) -> String {
         render_rule_overlap_metric(&report.metrics.rule_overlap)
     ));
     lines.push(format!(
-        "Markdown links: {} files, {} checked, {} broken, {} skipped",
+        "Markdown links: {} files, {} checked, {} broken, {} blocking, {} skipped",
         report.metrics.markdown_links.markdown_files,
         report.metrics.markdown_links.links_checked,
         report.metrics.markdown_links.broken_links,
+        report.metrics.markdown_links.blocking_findings,
         report.metrics.markdown_links.skipped_links
     ));
 

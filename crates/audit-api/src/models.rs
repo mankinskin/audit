@@ -162,8 +162,30 @@ pub struct MarkdownLinkMetric {
     pub status: TrialStatus,
     pub markdown_files: usize,
     pub links_checked: usize,
+    /// Count of `missing_target` findings (destination does not exist).
     pub broken_links: usize,
+    /// Count of external URLs, fragment-only links, and cross-repository
+    /// links (all intentionally not resolved for existence).
     pub skipped_links: usize,
+    /// Total count of blocking findings across every blocking class
+    /// (missing target, non-guidance target, unsupported dependency, unsafe
+    /// path, unreadable artifact). `audit links`/full audit treat this as
+    /// the portability gate.
+    pub blocking_findings: usize,
+    /// Count of `non_guidance_target` findings (local target exists but is
+    /// outside the portable guidance corpus).
+    pub non_guidance_links: usize,
+    /// Count of `cross_repository` findings (non-blocking, but always
+    /// recorded rather than silently skipped or accepted).
+    pub cross_repository_links: usize,
+    /// Count of `unsupported_dependency` findings.
+    pub unsupported_dependency_links: usize,
+    /// Count of `unsafe_path` findings (destination resolves outside the
+    /// repository root).
+    pub unsafe_path_links: usize,
+    /// Count of `unreadable_artifact` findings (source Markdown could not
+    /// be read).
+    pub unreadable_links: usize,
     pub details: Option<String>,
 }
 
@@ -175,6 +197,12 @@ impl MarkdownLinkMetric {
             links_checked: 0,
             broken_links: 0,
             skipped_links: 0,
+            blocking_findings: 0,
+            non_guidance_links: 0,
+            cross_repository_links: 0,
+            unsupported_dependency_links: 0,
+            unsafe_path_links: 0,
+            unreadable_links: 0,
             details: Some(details.into()),
         }
     }

@@ -5,6 +5,69 @@ use session_api::{
 use tempfile::tempdir;
 
 #[test]
+fn links_command_passes_on_clean_guidance_corpus() {
+    let temp = tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join(".agents")).unwrap();
+    std::fs::write(temp.path().join("README.md"), "# Repo\n").unwrap();
+    std::fs::write(
+        temp.path().join(".agents/links.md"),
+        "[good](../README.md)\n",
+    )
+    .unwrap();
+
+    let cli = parse_cli_from(["audit", "--json", "links", temp.path().to_str().unwrap()])
+        .expect("parse links");
+
+    match run(cli).expect("run links") {
+        CliOutput::Machine(value, _) => {
+            assert_eq!(value["metric"]["blocking_findings"], 0);
+            assert_eq!(value["metric"]["links_checked"], 1);
+        }
+        other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+#[test]
+fn links_command_fails_with_stable_category_and_evidence_on_blocking_finding() {
+    let temp = tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join(".agents")).unwrap();
+    std::fs::write(
+        temp.path().join(".agents/links.md"),
+        "[broken](missing.md)\n",
+    )
+    .unwrap();
+
+    let cli = parse_cli_from(["audit", "--json", "links", temp.path().to_str().unwrap()])
+        .expect("parse links");
+
+    let error = run(cli).expect_err("blocking finding must fail");
+    let message = error.to_string();
+    assert!(message.contains("markdown_link_missing_target"));
+    assert!(message.contains(".agents/links.md"));
+    assert!(message.contains("missing.md"));
+}
+
+#[test]
+fn run_command_fails_when_guidance_links_are_blocking() {
+    let temp = tempdir().unwrap();
+    std::fs::create_dir_all(temp.path().join(".agents")).unwrap();
+    std::fs::write(
+        temp.path().join(".agents/links.md"),
+        "[broken](missing.md)\n",
+    )
+    .unwrap();
+
+    let cli = parse_cli_from(["audit", "run", temp.path().to_str().unwrap()])
+        .expect("parse run");
+
+    let error = run(cli).expect_err("full audit must fail on blocking guidance links");
+    let message = error.to_string();
+    assert!(message.contains("markdown_link_missing_target"));
+    assert!(message.contains(".agents/links.md"));
+    assert!(message.contains("missing.md"));
+}
+
+#[test]
 fn parses_move_command() {
     let cli = parse_cli_from([
         "audit",
