@@ -28,51 +28,36 @@
 
 use std::collections::BTreeMap;
 
-use chrono::{
-    DateTime,
-    Utc,
-};
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use memory_kernel::{
-    ContentKind,
-    IndexEntry,
-    IndexRef,
-    IndexRelations,
-    IndexSidecar,
-    RelationKind,
+    ContentKind, IndexEntry, IndexRef, IndexRelations, IndexSidecar, RelationKind,
     index_generator::deterministic_uuid,
 };
 
-use crate::models::{
-    AuditFinding,
-    AuditReport,
-    Severity,
-};
+use crate::models::{AuditFinding, AuditReport, Severity};
 
 /// Provenance comment written at the top of `.audit/README.md`.
 ///
 /// Uses an `-index` suffixed prefix so index/catalog files are never confused
 /// with audit *data* files (decision Q2.1 of the `rendering-pipeline-integration`
 /// spec).
-pub const AUDIT_INDEX_FILE_COMMENT: &str =
-    "<!-- audit-index:file generated=true -->";
+pub const AUDIT_INDEX_FILE_COMMENT: &str = "<!-- audit-index:file generated=true -->";
 
 /// Per-entry provenance prefix (Q2.1). Each marker also carries a digest prefix
 /// (Q4.1): `<!-- audit-index:entry id=<uuid> digest=<hex12> -->`.
 pub const AUDIT_INDEX_ENTRY_PREFIX: &str = "audit-index:entry";
 
 /// Provenance comment for the generated agent-hook file.
-pub const AUDIT_INDEX_AGENT_HOOK_COMMENT: &str =
-    "<!-- audit-index:agent-hook generated=true -->";
+pub const AUDIT_INDEX_AGENT_HOOK_COMMENT: &str = "<!-- audit-index:agent-hook generated=true -->";
 
 /// Repository-relative path of the generated agent-hook file (D1).
 pub const AUDIT_INDEX_AGENT_HOOK_PATH: &str = ".agents/audit-catalog.md";
 
 /// Namespace UUID for deterministic audit entry UUIDs.
 const AUDIT_NS: Uuid = Uuid::from_bytes([
-    0xab, 0xcd, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x00, 0x11,
-    0x22, 0x33, 0x44, 0x55,
+    0xab, 0xcd, 0x12, 0x34, 0x56, 0x78, 0x90, 0xab, 0xcd, 0xef, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55,
 ]);
 
 /// The input to the generator: either a completed audit report or nothing.
@@ -111,9 +96,7 @@ fn severity_rank(s: &Severity) -> u8 {
     }
 }
 
-fn stable_finding_key(
-    f: &AuditFinding
-) -> (u8, &str, &str, Option<&str>, Option<usize>) {
+fn stable_finding_key(f: &AuditFinding) -> (u8, &str, &str, Option<&str>, Option<usize>) {
     (
         severity_rank(&f.severity),
         f.id.as_str(),
@@ -124,14 +107,11 @@ fn stable_finding_key(
 }
 
 /// Generate the full audit status catalog from the most recent audit run.
-pub fn generate_audit_catalog(
-    source: &AuditCatalogSource<'_>
-) -> AuditCatalogArtifacts {
+pub fn generate_audit_catalog(source: &AuditCatalogSource<'_>) -> AuditCatalogArtifacts {
     let generated_at = epoch();
     match source.report {
         None => generate_no_data_catalog(source.store_dir, generated_at),
-        Some(report) =>
-            generate_from_report(report, source.store_dir, generated_at),
+        Some(report) => generate_from_report(report, source.store_dir, generated_at),
     }
 }
 
@@ -139,20 +119,15 @@ pub fn generate_audit_catalog(
 // No-data path
 // ---------------------------------------------------------------------------
 
-fn generate_no_data_catalog(
-    store_dir: &str,
-    generated_at: DateTime<Utc>,
-) -> AuditCatalogArtifacts {
-    let root_id =
-        deterministic_uuid(AUDIT_NS, &format!("audit-root:{store_dir}"));
+fn generate_no_data_catalog(store_dir: &str, generated_at: DateTime<Utc>) -> AuditCatalogArtifacts {
+    let root_id = deterministic_uuid(AUDIT_NS, &format!("audit-root:{store_dir}"));
 
     let mut root = IndexEntry {
         id: root_id,
         kind: ContentKind::WorkspaceSummary,
         source_path: format!("{store_dir}/index.toon"),
         title: "Audit summary — no data".to_string(),
-        summary: "No audit has been run yet. Run `audit run .` to populate."
-            .to_string(),
+        summary: "No audit has been run yet. Run `audit run .` to populate.".to_string(),
         keywords: vec!["audit".to_string(), "summary".to_string()],
         scope: None,
         non_goals: None,
@@ -164,8 +139,7 @@ fn generate_no_data_catalog(
     };
     root.seal();
 
-    let mut sidecar =
-        IndexSidecar::new(ContentKind::WorkspaceSummary, store_dir, vec![root]);
+    let mut sidecar = IndexSidecar::new(ContentKind::WorkspaceSummary, store_dir, vec![root]);
     sidecar.generated_at = generated_at;
     sidecar.sort();
 
@@ -188,8 +162,7 @@ fn generate_from_report(
     store_dir: &str,
     generated_at: DateTime<Utc>,
 ) -> AuditCatalogArtifacts {
-    let root_id =
-        deterministic_uuid(AUDIT_NS, &format!("audit-root:{store_dir}"));
+    let root_id = deterministic_uuid(AUDIT_NS, &format!("audit-root:{store_dir}"));
 
     // Group findings by category (BTreeMap keeps keys sorted).
     let mut by_category: BTreeMap<String, Vec<&AuditFinding>> = BTreeMap::new();
@@ -234,13 +207,7 @@ fn generate_from_report(
     let mut category_entries: Vec<IndexEntry> = by_category
         .iter()
         .map(|(category, findings)| {
-            make_category_entry(
-                category,
-                findings,
-                root_id,
-                store_dir,
-                generated_at,
-            )
+            make_category_entry(category, findings, root_id, store_dir, generated_at)
         })
         .collect();
     for e in &mut category_entries {
@@ -283,13 +250,11 @@ fn generate_from_report(
     let mut entries = vec![root];
     entries.extend(category_entries);
 
-    let mut sidecar =
-        IndexSidecar::new(ContentKind::AuditFinding, store_dir, entries);
+    let mut sidecar = IndexSidecar::new(ContentKind::AuditFinding, store_dir, entries);
     sidecar.generated_at = generated_at;
     sidecar.sort();
 
-    let readme_markdown =
-        render_readme(report, store_dir, &sidecar, &by_category);
+    let readme_markdown = render_readme(report, store_dir, &sidecar, &by_category);
     let agent_hook_markdown = render_agent_hook(store_dir, &sidecar);
 
     AuditCatalogArtifacts {
@@ -306,10 +271,7 @@ fn make_category_entry(
     store_dir: &str,
     generated_at: DateTime<Utc>,
 ) -> IndexEntry {
-    let entry_id = deterministic_uuid(
-        AUDIT_NS,
-        &format!("audit-category:{store_dir}:{category}"),
-    );
+    let entry_id = deterministic_uuid(AUDIT_NS, &format!("audit-category:{store_dir}:{category}"));
 
     let high = findings
         .iter()
@@ -452,10 +414,7 @@ fn render_readme(
             "- source files: {}\n",
             report.metrics.source_files
         ));
-        out.push_str(&format!(
-            "- total lines: {}\n",
-            report.metrics.total_lines
-        ));
+        out.push_str(&format!("- total lines: {}\n", report.metrics.total_lines));
         out.push_str(&format!("- ref: `{store_dir}/index.toon`\n"));
     }
 
@@ -463,12 +422,9 @@ fn render_readme(
         out.push_str("\n## Findings by Category\n");
 
         for (category, findings) in by_category {
-            let category_id = deterministic_uuid(
-                AUDIT_NS,
-                &format!("audit-category:{store_dir}:{category}"),
-            );
-            let category_entry =
-                sidecar.entries.iter().find(|e| e.id == category_id);
+            let category_id =
+                deterministic_uuid(AUDIT_NS, &format!("audit-category:{store_dir}:{category}"));
+            let category_entry = sidecar.entries.iter().find(|e| e.id == category_id);
 
             let high = findings
                 .iter()
@@ -494,8 +450,7 @@ fn render_readme(
             } else {
                 // Fallback — look up by category name in scope or title.
                 let fallback = sidecar.entries.iter().find(|e| {
-                    e.kind == ContentKind::AuditFinding
-                        && e.title.contains(category.as_str())
+                    e.kind == ContentKind::AuditFinding && e.title.contains(category.as_str())
                 });
                 if let Some(fb) = fallback {
                     out.push_str(&format!(
@@ -524,10 +479,7 @@ fn render_readme(
     out
 }
 
-fn render_agent_hook(
-    store_dir: &str,
-    sidecar: &IndexSidecar,
-) -> String {
+fn render_agent_hook(store_dir: &str, sidecar: &IndexSidecar) -> String {
     let total = sidecar.entries.len().saturating_sub(1); // exclude root
     let finding_entries: Vec<_> = sidecar
         .entries
@@ -571,20 +523,9 @@ mod tests {
 
     use super::*;
     use crate::models::{
-        AuditFinding,
-        AuditMetrics,
-        AuditReport,
-        AuditRunInfo,
-        CountMetric,
-        CoverageSummary,
-        FileLengthMetric,
-        RuleOverlapSummary,
-        RepositoryGuidanceMetric,
-        Severity,
-        SpecFulfillmentSummary,
-        StaticMetricsSummary,
-        SyncStats,
-        TestSummary,
+        AuditFinding, AuditMetrics, AuditReport, AuditRunInfo, CountMetric, CoverageSummary,
+        FileLengthMetric, MarkdownLinkMetric, RepositoryGuidanceMetric, RuleOverlapSummary,
+        Severity, SpecFulfillmentSummary, StaticMetricsSummary, SyncStats, TestSummary,
         TrialStatus,
     };
 
@@ -640,17 +581,14 @@ mod tests {
                     empty_files: 0,
                     details: Some("n/a".to_string()),
                 },
+                markdown_links: MarkdownLinkMetric::unavailable("n/a"),
             },
             findings,
             instructions: vec![],
         }
     }
 
-    fn finding(
-        id: &str,
-        category: &str,
-        severity: Severity,
-    ) -> AuditFinding {
+    fn finding(id: &str, category: &str, severity: Severity) -> AuditFinding {
         AuditFinding {
             id: id.to_string(),
             category: category.to_string(),
@@ -734,8 +672,7 @@ mod tests {
 
     #[test]
     fn catalog_is_byte_stable() {
-        let report =
-            minimal_report(vec![finding("f1", "file_length", Severity::Low)]);
+        let report = minimal_report(vec![finding("f1", "file_length", Severity::Low)]);
         let source = AuditCatalogSource {
             report: Some(&report),
             store_dir: ".audit",
@@ -785,8 +722,7 @@ mod tests {
 
     #[test]
     fn readme_has_provenance_and_category_sections() {
-        let report =
-            minimal_report(vec![finding("f1", "file_length", Severity::High)]);
+        let report = minimal_report(vec![finding("f1", "file_length", Severity::High)]);
         let source = AuditCatalogSource {
             report: Some(&report),
             store_dir: ".audit",

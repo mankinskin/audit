@@ -9,7 +9,7 @@ agent: "agent"
 
 Run automated audit tooling for the requested scope, gather the strongest supporting validation, and return findings first.
 
-Reference [audit-cli](../../workflow-tools/audit/crates/audit-cli/README.md), [audit-mcp](../../workflow-tools/audit/crates/audit-mcp/README.md), [ticket-cli](../../memory-api/tools/cli/ticket-cli/README.md), [spec-cli](../../memory-api/tools/cli/spec-cli/README.md), and [log-viewer](../../workflow-tools/log/crates/log-viewer/README.md).
+Reference [audit-cli](../../crates/audit-cli/README.md), [audit-mcp](../../crates/audit-mcp/README.md), [ticket-cli](../../../../context-engine/memory-api/tools/cli/ticket-cli/README.md), [spec-cli](../../../../context-engine/memory-api/tools/cli/spec-cli/README.md), and [log-viewer](../../../log/crates/log-viewer/README.md).
 
 ## Workflow
 

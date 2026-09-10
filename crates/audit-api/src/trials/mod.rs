@@ -1,5 +1,6 @@
 pub mod cargo_quality;
 pub mod file_length;
+pub mod markdown_links;
 pub mod rule_overlap;
 pub mod repository_guidance;
 pub mod session_workflow_graph;

@@ -1,39 +1,19 @@
-use std::{
-    collections::BTreeSet,
-    path::Path,
-};
+use std::{collections::BTreeSet, path::Path};
 
 use chrono::Utc;
 
 use crate::{
-    config::{
-        AuditFileConfig,
-        format_output_path,
-    },
+    config::{AuditFileConfig, format_output_path},
     error::AuditError,
     index::RepositoryIndex,
-    models::{
-        AuditConfig,
-        AuditMetrics,
-        AuditReport,
-        AuditRunInfo,
-    },
+    models::{AuditConfig, AuditMetrics, AuditReport, AuditRunInfo},
     trials::{
-        cargo_quality,
-        file_length,
-        rule_overlap,
-        repository_guidance,
-        session_workflow_graph,
-        spec_fulfillment,
-        static_metrics,
-        ticket_graph,
+        cargo_quality, file_length, markdown_links, repository_guidance, rule_overlap,
+        session_workflow_graph, spec_fulfillment, static_metrics, ticket_graph,
     },
 };
 
-pub fn audit(
-    repo_root: &Path,
-    config: AuditConfig,
-) -> Result<AuditReport, AuditError> {
+pub fn audit(repo_root: &Path, config: AuditConfig) -> Result<AuditReport, AuditError> {
     if !repo_root.exists() {
         return Err(AuditError::MissingRepoRoot(format_output_path(repo_root)));
     }
@@ -45,21 +25,12 @@ pub fn audit(
     let sync = index.sync_source_files(&file_config.exclude_paths)?;
     let indexed_files = index.indexed_files()?;
 
-    let file_length_result =
-        file_length::evaluate(&indexed_files, config.max_file_lines);
-    let static_metrics_result = static_metrics::evaluate(
-        &repo_root,
-        &indexed_files,
-        config.max_cyclomatic_complexity,
-    )?;
-    let compiler_warnings_result = cargo_quality::collect_compiler_warnings(
-        &repo_root,
-        &file_config.exclude_paths,
-    )?;
-    let test_results = cargo_quality::collect_test_success(
-        &repo_root,
-        &file_config.exclude_paths,
-    )?;
+    let file_length_result = file_length::evaluate(&indexed_files, config.max_file_lines);
+    let static_metrics_result =
+        static_metrics::evaluate(&repo_root, &indexed_files, config.max_cyclomatic_complexity)?;
+    let compiler_warnings_result =
+        cargo_quality::collect_compiler_warnings(&repo_root, &file_config.exclude_paths)?;
+    let test_results = cargo_quality::collect_test_success(&repo_root, &file_config.exclude_paths)?;
     let coverage_result = cargo_quality::collect_coverage(
         &repo_root,
         &file_config.exclude_paths,
@@ -67,11 +38,10 @@ pub fn audit(
     )?;
     let spec_fulfillment_result = spec_fulfillment::evaluate(&repo_root);
     let ticket_graph_result = ticket_graph::evaluate(&repo_root);
-    let session_workflow_graph_result =
-        session_workflow_graph::evaluate(&repo_root);
+    let session_workflow_graph_result = session_workflow_graph::evaluate(&repo_root);
     let rule_overlap_result = rule_overlap::evaluate(&repo_root);
-    let repository_guidance_result =
-        repository_guidance::evaluate(&repo_root);
+    let repository_guidance_result = repository_guidance::evaluate(&repo_root);
+    let markdown_link_result = markdown_links::evaluate(&repo_root, &file_config.exclude_paths);
 
     let mut findings = file_length_result.findings;
     findings.extend(static_metrics_result.findings);
@@ -83,6 +53,7 @@ pub fn audit(
     findings.extend(session_workflow_graph_result.findings);
     findings.extend(rule_overlap_result.findings);
     findings.extend(repository_guidance_result.findings);
+    findings.extend(markdown_link_result.findings);
 
     let total_lines = indexed_files.iter().map(|file| file.line_count).sum();
     let metrics = AuditMetrics {
@@ -98,6 +69,7 @@ pub fn audit(
         session_workflow_graph: session_workflow_graph_result.metric,
         rule_overlap: rule_overlap_result.metric,
         repository_guidance: repository_guidance_result.metric,
+        markdown_links: markdown_link_result.metric,
     };
 
     let finished_at = Utc::now();
@@ -130,9 +102,7 @@ pub fn audit(
     })
 }
 
-fn collect_instructions(
-    findings: &[crate::models::AuditFinding]
-) -> Vec<String> {
+fn collect_instructions(findings: &[crate::models::AuditFinding]) -> Vec<String> {
     let mut unique = BTreeSet::new();
     for finding in findings {
         for instruction in &finding.instructions {

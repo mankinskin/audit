@@ -1,7 +1,4 @@
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,6 +157,29 @@ pub struct RuleOverlapSummary {
     pub details: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MarkdownLinkMetric {
+    pub status: TrialStatus,
+    pub markdown_files: usize,
+    pub links_checked: usize,
+    pub broken_links: usize,
+    pub skipped_links: usize,
+    pub details: Option<String>,
+}
+
+impl MarkdownLinkMetric {
+    pub fn unavailable(details: impl Into<String>) -> Self {
+        Self {
+            status: TrialStatus::Unavailable,
+            markdown_files: 0,
+            links_checked: 0,
+            broken_links: 0,
+            skipped_links: 0,
+            details: Some(details.into()),
+        }
+    }
+}
+
 pub use crate::trials::repository_guidance::RepositoryGuidanceMetric;
 
 impl RuleOverlapSummary {
@@ -235,6 +255,7 @@ pub struct AuditMetrics {
     pub session_workflow_graph: CountMetric,
     pub rule_overlap: RuleOverlapSummary,
     pub repository_guidance: RepositoryGuidanceMetric,
+    pub markdown_links: MarkdownLinkMetric,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

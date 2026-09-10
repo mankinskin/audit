@@ -1,49 +1,22 @@
 use std::{
     ffi::OsString,
     fs,
-    path::{
-        Path,
-        PathBuf,
-    },
+    path::{Path, PathBuf},
 };
 
-use clap::{
-    Args,
-    Parser,
-    Subcommand,
-    ValueEnum,
-};
-use serde_json::{
-    Value,
-    json,
-};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use serde_json::{Value, json};
 
 use audit_api::{
     audit::audit,
     error::AuditError,
     index::RepositoryIndex,
-    models::{
-        AuditConfig,
-        AuditReport,
-        TrialStatus,
-    },
-    store_index::{
-        AUDIT_INDEX_AGENT_HOOK_PATH,
-        AuditCatalogSource,
-        generate_audit_catalog,
-    },
-    summary::{
-        AuditSummaryBy,
-        AuditSummaryReport,
-        summarize_report,
-    },
+    models::{AuditConfig, AuditReport, TrialStatus},
+    store_index::{AUDIT_INDEX_AGENT_HOOK_PATH, AuditCatalogSource, generate_audit_catalog},
+    summary::{AuditSummaryBy, AuditSummaryReport, summarize_report},
 };
 use memory_kernel::generated_markdown::prepare_generated_output;
-use session_api::{
-    SessionAuditReport,
-    SessionAuditSelector,
-    SessionStoreConfig,
-};
+use session_api::{SessionAuditReport, SessionAuditSelector, SessionStoreConfig};
 use uuid::Uuid;
 
 #[derive(Debug, Parser)]
@@ -68,6 +41,9 @@ pub struct AuditCli {
 pub enum AuditCommand {
     /// Run an audit for a repository.
     Run(AuditArgs),
+
+    /// Check relative Markdown links in the repository guidance corpus.
+    Links(LinksArgs),
 
     /// Move an audit repository root to another workspace store.
     Move(MoveArgs),
@@ -129,6 +105,13 @@ pub struct AuditArgs {
 }
 
 #[derive(Debug, Args)]
+pub struct LinksArgs {
+    /// Repository root to check.
+    #[arg(default_value = ".")]
+    pub repo_root: PathBuf,
+}
+
+#[derive(Debug, Args)]
 pub struct AuditSummaryArgs {
     #[arg(long, value_enum)]
     pub by: SummaryByArg,
@@ -176,8 +159,7 @@ pub enum SummaryByArg {
 impl From<SummaryByArg> for AuditSummaryBy {
     fn from(value: SummaryByArg) -> Self {
         match value {
-            SummaryByArg::Crate | SummaryByArg::Package =>
-                AuditSummaryBy::Crate,
+            SummaryByArg::Crate | SummaryByArg::Package => AuditSummaryBy::Crate,
             SummaryByArg::Category => AuditSummaryBy::Category,
             SummaryByArg::Severity => AuditSummaryBy::Severity,
             SummaryByArg::Metric => AuditSummaryBy::Metric,
@@ -199,6 +181,9 @@ pub enum CliRunError {
 
     #[error("store-index error: {0}")]
     StoreIndex(String),
+
+    #[error("broken Markdown links:\n{0}")]
+    BrokenLinks(String),
 }
 
 #[derive(Debug)]
@@ -226,22 +211,21 @@ pub fn run(cli: AuditCli) -> Result<CliOutput, CliRunError> {
         AuditCommand::Run(args) => {
             if args.session_id.is_some() || args.latest_session {
                 let report = run_session_audit(&args)?;
-                if let Some(format) = machine_output_format(cli.json, cli.toon)
-                {
+                if let Some(format) = machine_output_format(cli.json, cli.toon) {
                     Ok(CliOutput::Machine(json!(report), format))
                 } else {
                     Ok(CliOutput::Text(render_session_audit_human(&report)))
                 }
             } else {
                 let report = run_audit(&args)?;
-                if let Some(format) = machine_output_format(cli.json, cli.toon)
-                {
+                if let Some(format) = machine_output_format(cli.json, cli.toon) {
                     Ok(CliOutput::Machine(json!(report), format))
                 } else {
                     Ok(CliOutput::Text(render_human(&report)))
                 }
             }
-        },
+        }
+        AuditCommand::Links(args) => run_links(&args, cli.json, cli.toon),
         AuditCommand::StoreIndex(args) => {
             let result = cmd_store_index(args)?;
             if let Some(format) = machine_output_format(cli.json, cli.toon) {
@@ -249,7 +233,7 @@ pub fn run(cli: AuditCli) -> Result<CliOutput, CliRunError> {
             } else {
                 Ok(CliOutput::Text(render_store_index_result(&result)))
             }
-        },
+        }
         AuditCommand::Summary(summary) => {
             let report = run_audit(&summary.args)?;
             let summary = summarize_report(&report, summary.by.into())?;
@@ -258,18 +242,17 @@ pub fn run(cli: AuditCli) -> Result<CliOutput, CliRunError> {
             } else {
                 Ok(CliOutput::Text(render_summary_human(&summary)))
             }
-        },
+        }
         AuditCommand::Move(args) => {
             let result = cmd_move(args)?;
             if let Some(format) = machine_output_format(cli.json, cli.toon) {
                 Ok(CliOutput::Machine(result, format))
             } else {
                 Ok(CliOutput::Text(
-                    serde_json::to_string_pretty(&result)
-                        .unwrap_or_else(|_| format!("{result:?}")),
+                    serde_json::to_string_pretty(&result).unwrap_or_else(|_| format!("{result:?}")),
                 ))
             }
-        },
+        }
     }
 }
 
@@ -284,9 +267,7 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
 
     if let Some(journal_id) = args.resume.as_deref() {
         let journal_id = journal_id.parse::<Uuid>().map_err(|error| {
-            CliRunError::BadRequest(format!(
-                "invalid --resume journal UUID: {error}"
-            ))
+            CliRunError::BadRequest(format!("invalid --resume journal UUID: {error}"))
         })?;
         let outcome = index.resume_move_with_journal(journal_id)?;
         return Ok(json!({
@@ -301,9 +282,7 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
 
     if let Some(journal_id) = args.rollback.as_deref() {
         let journal_id = journal_id.parse::<Uuid>().map_err(|error| {
-            CliRunError::BadRequest(format!(
-                "invalid --rollback journal UUID: {error}"
-            ))
+            CliRunError::BadRequest(format!("invalid --rollback journal UUID: {error}"))
         })?;
         let outcome = index.rollback_move_with_journal(journal_id)?;
         return Ok(json!({
@@ -317,21 +296,17 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
     }
 
     let id = args.id.as_deref().ok_or_else(|| {
+        CliRunError::BadRequest("move requires <id> unless --resume/--rollback is used".to_string())
+    })?;
+    let to_workspace_root = args.to_workspace_root.as_deref().ok_or_else(|| {
         CliRunError::BadRequest(
-            "move requires <id> unless --resume/--rollback is used".to_string(),
+            "move requires --to-workspace-root in plan/execute mode".to_string(),
         )
     })?;
-    let to_workspace_root =
-        args.to_workspace_root.as_deref().ok_or_else(|| {
-            CliRunError::BadRequest(
-                "move requires --to-workspace-root in plan/execute mode"
-                    .to_string(),
-            )
-        })?;
 
-    let audit_id = id.parse::<Uuid>().map_err(|error| {
-        CliRunError::BadRequest(format!("invalid audit UUID: {error}"))
-    })?;
+    let audit_id = id
+        .parse::<Uuid>()
+        .map_err(|error| CliRunError::BadRequest(format!("invalid audit UUID: {error}")))?;
     let report = index.plan_move_preflight(&audit_id, to_workspace_root)?;
 
     if args.dry_run || !report.supported() {
@@ -360,9 +335,7 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
     }))
 }
 
-fn move_plan_json(
-    report: &memory_kernel::storage::move_kernel::MovePlan
-) -> Value {
+fn move_plan_json(report: &memory_kernel::storage::move_kernel::MovePlan) -> Value {
     json!({
         "supported": report.supported(),
         "entity_id": report.entity_id,
@@ -387,9 +360,7 @@ fn move_plan_json(
     })
 }
 
-fn move_outcome_json(
-    outcome: &memory_kernel::storage::move_kernel::MoveOutcome
-) -> Value {
+fn move_outcome_json(outcome: &memory_kernel::storage::move_kernel::MoveOutcome) -> Value {
     json!({
         "resumed": outcome.resumed,
         "rolled_back": outcome.rolled_back,
@@ -441,9 +412,63 @@ fn run_audit(args: &AuditArgs) -> Result<AuditReport, CliRunError> {
     Ok(audit(&args.repo_root, config)?)
 }
 
-fn run_session_audit(
-    args: &AuditArgs
-) -> Result<SessionAuditReport, CliRunError> {
+fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput, CliRunError> {
+    let repo_root = args
+        .repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| args.repo_root.clone());
+    if !repo_root.is_dir() {
+        return Err(CliRunError::BadRequest(format!(
+            "repository root does not exist: {}",
+            display_path(&repo_root)
+        )));
+    }
+
+    let result = audit_api::trials::markdown_links::evaluate(&repo_root, &[]);
+    let payload = json!({
+        "command": "links",
+        "repo_root": display_path(&repo_root),
+        "metric": result.metric,
+        "findings": result.findings,
+    });
+    let output_format = machine_output_format(as_json, as_toon);
+    let output = match output_format {
+        Some(format) => CliOutput::Machine(payload, format),
+        None => CliOutput::Text(render_link_check_human(&payload)),
+    };
+
+    if result.metric.broken_links > 0 {
+        let details = result
+            .findings
+            .iter()
+            .map(|finding| {
+                format!(
+                    "{}:{}: {}",
+                    finding.path.as_deref().unwrap_or("<unknown>"),
+                    finding.line.unwrap_or_default(),
+                    finding.summary
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        return Err(CliRunError::BrokenLinks(details));
+    }
+
+    Ok(output)
+}
+
+fn render_link_check_human(payload: &Value) -> String {
+    let metric = &payload["metric"];
+    format!(
+        "Markdown links: {} files, {} checked, {} broken, {} skipped",
+        metric["markdown_files"].as_u64().unwrap_or_default(),
+        metric["links_checked"].as_u64().unwrap_or_default(),
+        metric["broken_links"].as_u64().unwrap_or_default(),
+        metric["skipped_links"].as_u64().unwrap_or_default()
+    )
+}
+
+fn run_session_audit(args: &AuditArgs) -> Result<SessionAuditReport, CliRunError> {
     let repo_root = args
         .repo_root
         .canonicalize()
@@ -458,8 +483,7 @@ fn run_session_audit(
         SessionAuditSelector::SessionId(session_id)
     } else {
         return Err(CliRunError::BadRequest(
-            "session audit mode requires --latest-session or --session-id"
-                .to_string(),
+            "session audit mode requires --latest-session or --session-id".to_string(),
         ));
     };
 
@@ -467,26 +491,19 @@ fn run_session_audit(
     Ok(store.session_audit(selector)?)
 }
 
-pub fn error_output(
-    message: &str,
-    format: Option<MachineOutputFormat>,
-) -> String {
+pub fn error_output(message: &str, format: Option<MachineOutputFormat>) -> String {
     let payload = json!({
         "code": "invalid_request",
         "message": message,
     });
     match format {
-        Some(MachineOutputFormat::Json) =>
+        Some(MachineOutputFormat::Json) => {
             serde_json::to_string_pretty(&payload).unwrap_or_else(|_| {
-                format!(
-                    "{{\"code\":\"invalid_request\",\"message\":{:?}}}",
-                    message
-                )
-            }),
-        Some(MachineOutputFormat::Toon) =>
-            toon_format::encode_default(&payload).unwrap_or_else(|_| {
-                format!("code: invalid_request\nmessage: {message}")
-            }),
+                format!("{{\"code\":\"invalid_request\",\"message\":{:?}}}", message)
+            })
+        }
+        Some(MachineOutputFormat::Toon) => toon_format::encode_default(&payload)
+            .unwrap_or_else(|_| format!("code: invalid_request\nmessage: {message}")),
         None => message.to_string(),
     }
 }
@@ -496,17 +513,16 @@ pub fn render_machine_output(
     format: MachineOutputFormat,
 ) -> Result<String, String> {
     match format {
-        MachineOutputFormat::Json =>
-            serde_json::to_string_pretty(payload).map_err(|err| err.to_string()),
-        MachineOutputFormat::Toon =>
-            toon_format::encode_default(payload).map_err(|err| err.to_string()),
+        MachineOutputFormat::Json => {
+            serde_json::to_string_pretty(payload).map_err(|err| err.to_string())
+        }
+        MachineOutputFormat::Toon => {
+            toon_format::encode_default(payload).map_err(|err| err.to_string())
+        }
     }
 }
 
-pub fn machine_output_format(
-    as_json: bool,
-    as_toon: bool,
-) -> Option<MachineOutputFormat> {
+pub fn machine_output_format(as_json: bool, as_toon: bool) -> Option<MachineOutputFormat> {
     if as_json {
         Some(MachineOutputFormat::Json)
     } else if as_toon {
@@ -516,8 +532,7 @@ pub fn machine_output_format(
     }
 }
 
-pub fn requested_machine_output_format_from_args() -> Option<MachineOutputFormat>
-{
+pub fn requested_machine_output_format_from_args() -> Option<MachineOutputFormat> {
     machine_output_format(
         std::env::args().any(|arg| arg == "--json"),
         std::env::args().any(|arg| arg == "--toon"),
@@ -585,14 +600,20 @@ fn render_human(report: &AuditReport) -> String {
         "Rule overlap: {}",
         render_rule_overlap_metric(&report.metrics.rule_overlap)
     ));
+    lines.push(format!(
+        "Markdown links: {} files, {} checked, {} broken, {} skipped",
+        report.metrics.markdown_links.markdown_files,
+        report.metrics.markdown_links.links_checked,
+        report.metrics.markdown_links.broken_links,
+        report.metrics.markdown_links.skipped_links
+    ));
 
     if report.findings.is_empty() {
         lines.push("Findings: none".to_string());
     } else {
         lines.push(format!("Findings: {}", report.findings.len()));
         for finding in &report.findings {
-            let mut line =
-                format!("- [{:?}] {}", finding.severity, finding.summary);
+            let mut line = format!("- [{:?}] {}", finding.severity, finding.summary);
             if let Some(path) = &finding.path {
                 line.push_str(&format!(" ({path})"));
             }
@@ -711,26 +732,20 @@ fn render_test_metric(metric: &audit_api::models::TestSummary) -> String {
     }
 }
 
-fn render_coverage_metric(
-    metric: &audit_api::models::CoverageSummary
-) -> String {
+fn render_coverage_metric(metric: &audit_api::models::CoverageSummary) -> String {
     match metric.status {
         TrialStatus::Collected => metric
             .line_percent
             .map(|value| format!("{value:.1}%"))
             .unwrap_or_else(|| "n/a".to_string()),
-        TrialStatus::Unavailable
-        | TrialStatus::NotApplicable
-        | TrialStatus::Failed => metric
+        TrialStatus::Unavailable | TrialStatus::NotApplicable | TrialStatus::Failed => metric
             .details
             .clone()
             .unwrap_or_else(|| "unavailable".to_string()),
     }
 }
 
-fn render_spec_fulfillment_metric(
-    metric: &audit_api::models::SpecFulfillmentSummary
-) -> String {
+fn render_spec_fulfillment_metric(metric: &audit_api::models::SpecFulfillmentSummary) -> String {
     match metric.status {
         TrialStatus::Collected => format!(
             "{} structured specs ({} satisfied, {} blocked, {} missed)",
@@ -739,18 +754,14 @@ fn render_spec_fulfillment_metric(
             metric.blocked_specs,
             metric.missed_specs
         ),
-        TrialStatus::Unavailable
-        | TrialStatus::NotApplicable
-        | TrialStatus::Failed => metric
+        TrialStatus::Unavailable | TrialStatus::NotApplicable | TrialStatus::Failed => metric
             .details
             .clone()
             .unwrap_or_else(|| "unavailable".to_string()),
     }
 }
 
-fn render_rule_overlap_metric(
-    metric: &audit_api::models::RuleOverlapSummary
-) -> String {
+fn render_rule_overlap_metric(metric: &audit_api::models::RuleOverlapSummary) -> String {
     match metric.status {
         TrialStatus::Collected => format!(
             "{} high-overlap pairs across {} rules (max similarity {})",
@@ -761,9 +772,7 @@ fn render_rule_overlap_metric(
                 .map(|value| format!("{:.1}%", value * 100.0))
                 .unwrap_or_else(|| "n/a".to_string())
         ),
-        TrialStatus::Unavailable
-        | TrialStatus::NotApplicable
-        | TrialStatus::Failed => metric
+        TrialStatus::Unavailable | TrialStatus::NotApplicable | TrialStatus::Failed => metric
             .details
             .clone()
             .unwrap_or_else(|| "unavailable".to_string()),
@@ -804,10 +813,8 @@ fn cmd_store_index(args: StoreIndexArgs) -> Result<Value, CliRunError> {
         &artifacts.agent_hook_markdown,
         read_existing(&agent_hook_path).as_deref(),
     );
-    let sidecar_out = prepare_generated_output(
-        &sidecar_toon,
-        read_existing(&sidecar_path).as_deref(),
-    );
+    let sidecar_out =
+        prepare_generated_output(&sidecar_toon, read_existing(&sidecar_path).as_deref());
 
     let planned = [
         (&readme_path, &readme_out),
@@ -827,9 +834,7 @@ fn cmd_store_index(args: StoreIndexArgs) -> Result<Value, CliRunError> {
     if args.check {
         let drifted: Vec<String> = planned
             .iter()
-            .filter(|(path, content)| {
-                read_existing(path).as_deref() != Some(content.as_str())
-            })
+            .filter(|(path, content)| read_existing(path).as_deref() != Some(content.as_str()))
             .map(|(path, _)| display_path(path))
             .collect();
 
@@ -853,11 +858,9 @@ fn cmd_store_index(args: StoreIndexArgs) -> Result<Value, CliRunError> {
     let mut written = Vec::new();
     for (path, content) in &planned {
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| CliRunError::StoreIndex(e.to_string()))?;
+            fs::create_dir_all(parent).map_err(|e| CliRunError::StoreIndex(e.to_string()))?;
         }
-        fs::write(path, content)
-            .map_err(|e| CliRunError::StoreIndex(e.to_string()))?;
+        fs::write(path, content).map_err(|e| CliRunError::StoreIndex(e.to_string()))?;
         written.push(display_path(path));
     }
 
