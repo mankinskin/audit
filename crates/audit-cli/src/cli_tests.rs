@@ -1,10 +1,6 @@
 use super::*;
 use session_api::{
-    CopilotHookMessage,
-    CopilotHookPayload,
-    SessionCaptureRequest,
-    SessionRole,
-    SessionStoreConfig,
+    CopilotHookMessage, CopilotHookPayload, SessionCaptureRequest, SessionRole, SessionStoreConfig,
 };
 use tempfile::tempdir;
 
@@ -29,7 +25,7 @@ fn parses_move_command() {
             );
             assert_eq!(args.repo_root, PathBuf::from("/repo"));
             assert_eq!(args.to_workspace_root, Some(PathBuf::from("/target")));
-        },
+        }
         other => panic!("unexpected command: {other:?}"),
     }
 }
@@ -69,7 +65,7 @@ fn move_plans_blocked_when_audit_entity_has_no_folder() {
             assert_eq!(value["status"], "blocked");
             assert_eq!(value["mode"], "plan");
             assert!(value["plan"]["blockers"].as_array().unwrap().len() > 0);
-        },
+        }
         other => panic!("unexpected output: {other:?}"),
     }
 }
@@ -135,7 +131,7 @@ fn move_applies_resumes_and_rolls_back_entity_folder_finding() {
                 .expect("journal id")
                 .to_string();
             journal_id
-        },
+        }
         other => panic!("unexpected output: {other:?}"),
     };
 
@@ -154,7 +150,7 @@ fn move_applies_resumes_and_rolls_back_entity_folder_finding() {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["status"], "ok");
             assert_eq!(value["mode"], "rollback");
-        },
+        }
         other => panic!("unexpected output: {other:?}"),
     }
 }
@@ -195,7 +191,7 @@ fn move_rejects_unsupported_repository_level_layout_with_dry_run() {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["status"], "blocked");
             assert_eq!(value["dry_run"], true);
-        },
+        }
         other => panic!("unexpected output: {other:?}"),
     }
 }
@@ -226,7 +222,7 @@ fn parses_run_session_selector_flags() {
                 args.session_workspace_slug,
                 Some("context-engine".to_string())
             );
-        },
+        }
         other => panic!("unexpected command: {other:?}"),
     }
 }
@@ -274,18 +270,14 @@ fn run_latest_session_emits_session_audit_payload() {
         "repo",
     ])
     .expect("parse run latest-session");
-    let expected_workspace_path =
-        repo_root.to_string_lossy().replace('\\', "/");
+    let expected_workspace_path = repo_root.to_string_lossy().replace('\\', "/");
 
     match run(cli).expect("run latest-session") {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["session_id"], "session-cli");
             assert!(value["schema_version"].as_u64().unwrap_or(0) >= 1);
-            assert_eq!(
-                value["workspace_path"],
-                expected_workspace_path
-            );
-        },
+            assert_eq!(value["workspace_path"], expected_workspace_path);
+        }
         other => panic!("unexpected output: {other:?}"),
     }
 }
