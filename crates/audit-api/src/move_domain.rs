@@ -343,18 +343,11 @@ mod tests {
             .unwrap();
 
         let index = RepositoryIndex::init(&source_workspace).unwrap();
+        let store_root = index.db_path().parent().unwrap().to_path_buf();
         // Simulate the repository-level catalog artifacts; neither is an
         // entity folder and neither must ever resolve a source path.
-        std::fs::write(
-            source_workspace.join(AUDIT_INDEX_DIR).join("README.md"),
-            "generated",
-        )
-        .unwrap();
-        std::fs::write(
-            source_workspace.join(AUDIT_INDEX_DIR).join("index.toon"),
-            "generated",
-        )
-        .unwrap();
+        std::fs::write(store_root.join("README.md"), "generated").unwrap();
+        std::fs::write(store_root.join("index.toon"), "generated").unwrap();
 
         let repository_level_id = Uuid::new_v4();
         let plan = index

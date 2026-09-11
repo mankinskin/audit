@@ -818,14 +818,20 @@ fn cmd_store_index(args: StoreIndexArgs) -> Result<Value, CliRunError> {
     let repo_root = args.repo_root.canonicalize().unwrap_or(args.repo_root);
     let report = run_audit_from_root(&repo_root)?;
 
+    let store_root = audit_api::index::resolve_index_dir(&repo_root);
+    let store_dir = store_root
+        .strip_prefix(&repo_root)
+        .map(|relative| relative.to_string_lossy().replace('\\', "/"))
+        .unwrap_or_else(|_| STORE_DIR.to_string());
+
     let source = AuditCatalogSource {
         report: Some(&report),
-        store_dir: STORE_DIR,
+        store_dir: &store_dir,
     };
     let artifacts = generate_audit_catalog(&source);
 
-    let readme_path = repo_root.join(STORE_DIR).join("README.md");
-    let sidecar_path = repo_root.join(STORE_DIR).join("index.toon");
+    let readme_path = store_root.join("README.md");
+    let sidecar_path = store_root.join("index.toon");
     let agent_hook_path = repo_root.join(AUDIT_INDEX_AGENT_HOOK_PATH);
 
     let sidecar_toon = artifacts

@@ -11,6 +11,10 @@ use crate::{
 const GITIGNORE_HEADER: &str =
     "# Excluded local audit index artifacts created by audit-api.";
 
+/// Ignoring the ignore file itself keeps a store that holds only the local
+/// sqlite index invisible to `git status`.
+const GITIGNORE_SELF: &str = "/.gitignore";
+
 pub(crate) fn ensure_index_gitignore(
     index_dir: &Path,
     db_filename: &str,
@@ -23,7 +27,12 @@ pub(crate) fn ensure_index_gitignore(
         Err(error) => return Err(error.into()),
     };
 
-    let entries = [db_filename, "audit.sqlite3-shm", "audit.sqlite3-wal"];
+    let entries = [
+        db_filename,
+        "audit.sqlite3-shm",
+        "audit.sqlite3-wal",
+        GITIGNORE_SELF,
+    ];
     let missing: Vec<&str> = entries
         .iter()
         .copied()
@@ -66,7 +75,13 @@ pub(crate) fn is_excluded_path(
         let value = component.as_os_str().to_string_lossy();
         matches!(
             value.as_ref(),
-            ".git" | "target" | "node_modules" | ".audit" | ".idea" | ".vscode"
+            ".git"
+                | "target"
+                | "node_modules"
+                | ".audit"
+                | ".workflow-tools"
+                | ".idea"
+                | ".vscode"
         )
     }) {
         return true;

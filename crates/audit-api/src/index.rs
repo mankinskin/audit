@@ -39,6 +39,23 @@ use crate::{
 const INDEX_DIR: &str = ".audit";
 const INDEX_DB: &str = "audit.sqlite3";
 
+/// Location of an existing audit store at `repo_root`, never escaping it.
+pub fn resolve_index_dir(repo_root: &Path) -> PathBuf {
+    memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
+        repo_root, INDEX_DIR,
+    )
+}
+
+/// Location a new audit store is created at: an existing store when one is
+/// already present, otherwise the canonical `.workflow-tools/audit` path.
+fn index_dir_for_init(repo_root: &Path) -> PathBuf {
+    let resolved = resolve_index_dir(repo_root);
+    if resolved.is_dir() {
+        return resolved;
+    }
+    memory_kernel::workspace::canonical_store_root(repo_root, INDEX_DIR)
+}
+
 pub struct RepositoryIndex {
     repo_root: PathBuf,
     db_path: PathBuf,
@@ -56,9 +73,7 @@ impl RepositoryIndex {
             )));
         }
 
-        let index_dir = memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
-            repo_root, INDEX_DIR,
-        );
+        let index_dir = resolve_index_dir(repo_root);
         let db_path = index_dir.join(INDEX_DB);
         if !db_path.is_file() {
             return Err(AuditError::WorkspaceNotFound {
@@ -72,11 +87,12 @@ impl RepositoryIndex {
         };
         let conn = this.connect()?;
         this.init_schema(&conn)?;
+        ensure_index_gitignore(&index_dir, INDEX_DB)?;
         Ok(this)
     }
 
-    /// Initialize a new repository index. Creates `.audit/` and the sqlite
-    /// database. Idempotent: if the index already exists it is opened
+    /// Initialize a new repository index. Creates the store directory and the
+    /// sqlite database. Idempotent: if the index already exists it is opened
     /// without error.
     pub fn init(repo_root: &Path) -> Result<Self, AuditError> {
         if !repo_root.exists() {
@@ -85,9 +101,7 @@ impl RepositoryIndex {
             )));
         }
 
-        let index_dir = memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
-            repo_root, INDEX_DIR,
-        );
+        let index_dir = index_dir_for_init(repo_root);
         fs::create_dir_all(&index_dir)?;
         ensure_index_gitignore(&index_dir, INDEX_DB)?;
         let db_path = index_dir.join(INDEX_DB);
@@ -391,5 +405,60 @@ impl RepositoryIndex {
             );",
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::*;
+
+    #[test]
+    fn new_store_is_created_under_the_canonical_stores_directory() {
+        let temp = tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        fs::create_dir_all(&repo).unwrap();
+
+        let index = RepositoryIndex::init(&repo).unwrap();
+
+        assert_eq!(
+            index.db_path().parent().unwrap(),
+            repo.join(".workflow-tools").join("audit")
+        );
+        assert!(!repo.join(".audit").exists());
+    }
+
+    #[test]
+    fn existing_legacy_store_keeps_its_location() {
+        let temp = tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        fs::create_dir_all(repo.join(".audit")).unwrap();
+
+        let index = RepositoryIndex::init(&repo).unwrap();
+
+        assert_eq!(index.db_path().parent().unwrap(), repo.join(".audit"));
+    }
+
+    #[test]
+    fn store_gitignore_ignores_itself_so_a_run_leaves_no_untracked_files() {
+        let temp = tempdir().unwrap();
+        let repo = temp.path().join("repo");
+        fs::create_dir_all(&repo).unwrap();
+
+        let index = RepositoryIndex::init(&repo).unwrap();
+
+        let gitignore = fs::read_to_string(
+            index.db_path().parent().unwrap().join(".gitignore"),
+        )
+        .unwrap();
+        for entry in
+            [INDEX_DB, "audit.sqlite3-shm", "audit.sqlite3-wal", "/.gitignore"]
+        {
+            assert!(
+                gitignore.lines().any(|line| line.trim() == entry),
+                "missing {entry} in {gitignore}"
+            );
+        }
     }
 }
