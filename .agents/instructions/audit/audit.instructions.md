@@ -43,19 +43,31 @@ Machine-readable output:
 cargo run -p audit-cli --bin audit -- --json run <target-context>
 ```
 
-Markdown link-coherence check:
+Repository hook check:
 
 ```bash
-audit links <target-context>
+audit hook <target-context>
 ```
 
-The `links` command is the fast Rule Audit gate for the guidance corpus. It
-parses relative Markdown links in `.agents/**` and `AGENTS.md` files, resolves
-targets relative to each source file, and reports the source path, line, and
-missing target. HTTP(S), mailto, fragment-only, placeholder, out-of-repository,
-and nested-repository targets are skipped because they are not verifiable by a
-single repository audit. The command exits non-zero when any checked target is
-missing, making it suitable for hard-blocking commit hooks.
+The `hook` command is the repository-wide Rule Audit gate for the guidance
+corpus. It runs the full audit surface, including markdown link coherence and
+the repo's other blocking checks, and exits non-zero when any blocking finding
+remains. It is the canonical pre-commit gate for guidance repos. HTTP(S),
+mailto, fragment-only, placeholder, out-of-repository, and nested-repository
+targets are skipped because they are not verifiable by a single repository
+audit.
+
+When the hook finds a repairable issue, the complementary remediation is:
+
+```bash
+install-ctl guidance autofix --repo-root <target-context> --apply --yes
+```
+
+Or attempt the same repair directly from the hook itself:
+
+```bash
+audit hook <target-context> --autofix
+```
 
 Override thresholds for a stricter audit:
 
@@ -140,11 +152,11 @@ rtk audit --toon run <target-context>
 
 7. After edits, rerun the audit on the same target context to confirm findings were reduced or resolved.
 
-### Rule Audit: Markdown link coherence
+### Rule Audit: repository hook
 
-The Markdown link-coherence rule is the canonical Rule Audit for relocation
-drift in agent guidance. Run `audit links <target-context>` after changing
-guidance paths and before committing. The repository pre-commit hook invokes
-the same check when staged Markdown guidance changes are present; repair the
-reported source line and target, then stage the repair. Use `git commit
---no-verify` only for the documented, justified false-positive escape hatch.
+The repository hook is the canonical Rule Audit for relocation drift in agent
+guidance. Run `audit hook <target-context>` after changing guidance paths and
+before committing. The repository pre-commit hook invokes the same check when
+staged Markdown guidance changes are present; repair the reported source line
+and target, then stage the repair. Use `git commit --no-verify` only for the
+documented, justified false-positive escape hatch.

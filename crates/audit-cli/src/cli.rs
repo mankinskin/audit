@@ -42,8 +42,12 @@ pub enum AuditCommand {
     /// Run an audit for a repository.
     Run(AuditArgs),
 
-    /// Check relative Markdown links in the repository guidance corpus.
+    /// Legacy fast markdown-link gate kept for compatibility.
     Links(LinksArgs),
+
+    /// Run the repository hook checks, including guidance markdown verification.
+    #[command(name = "hook")]
+    Hook(HookArgs),
 
     /// Move an audit repository root to another workspace store.
     Move(MoveArgs),
@@ -109,6 +113,18 @@ pub struct LinksArgs {
     /// Repository root to check.
     #[arg(default_value = ".")]
     pub repo_root: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub struct HookArgs {
+    /// Repository root to audit.
+    #[arg(default_value = ".")]
+    pub repo_root: PathBuf,
+
+    /// After a blocking audit result, try to repair the findings with
+    /// `install-ctl guidance autofix --repo-root <root> --apply --yes`.
+    #[arg(long)]
+    pub autofix: bool,
 }
 
 #[derive(Debug, Args)]
@@ -229,6 +245,7 @@ pub fn run(cli: AuditCli) -> Result<CliOutput, CliRunError> {
             }
         }
         AuditCommand::Links(args) => run_links(&args, cli.json, cli.toon),
+        AuditCommand::Hook(args) => run_hook(&args, cli.json, cli.toon),
         AuditCommand::StoreIndex(args) => {
             let result = cmd_store_index(args)?;
             if let Some(format) = machine_output_format(cli.json, cli.toon) {
@@ -457,6 +474,128 @@ fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput
     Ok(output)
 }
 
+fn run_hook(args: &HookArgs, as_json: bool, as_toon: bool) -> Result<CliOutput, CliRunError> {
+    let repo_root = args
+        .repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| args.repo_root.clone());
+    if !repo_root.is_dir() {
+        return Err(CliRunError::BadRequest(format!(
+            "repository root does not exist: {}",
+            display_path(&repo_root)
+        )));
+    }
+
+    let mut report = run_audit(&AuditArgs {
+        repo_root: repo_root.clone(),
+        session_id: None,
+        latest_session: false,
+        session_store_root: None,
+        session_workspace_slug: None,
+        max_file_lines: None,
+        max_cyclomatic_complexity: None,
+        coverage_warn_below: None,
+    })?;
+
+    if report.metrics.markdown_links.blocking_findings > 0 && args.autofix {
+        let autofix_hint = guidance_autofix_command(&repo_root);
+        let autofix_result = run_guidance_autofix(&repo_root)
+            .map_err(|error| CliRunError::BadRequest(format!("autofix failed: {error}\ntry: {autofix_hint}")))?;
+        if !autofix_result.is_empty() {
+            println!("{autofix_result}");
+        }
+
+        report = run_audit(&AuditArgs {
+            repo_root: repo_root.clone(),
+            session_id: None,
+            latest_session: false,
+            session_store_root: None,
+            session_workspace_slug: None,
+            max_file_lines: None,
+            max_cyclomatic_complexity: None,
+            coverage_warn_below: None,
+        })?;
+    }
+
+    if report.metrics.markdown_links.blocking_findings > 0 {
+        return Err(CliRunError::BrokenLinks(format!(
+            "{}\n\ntry: {}",
+            blocking_link_details(&report),
+            guidance_autofix_command(&repo_root)
+        )));
+    }
+
+    let payload = json!({
+        "command": "hook",
+        "repo_root": display_path(&repo_root),
+        "autofix": args.autofix,
+        "report": report,
+    });
+    let output_format = machine_output_format(as_json, as_toon);
+    let output = match output_format {
+        Some(format) => CliOutput::Machine(payload, format),
+        None => CliOutput::Text(render_human(&report)),
+    };
+
+    Ok(output)
+}
+
+fn guidance_autofix_command(repo_root: &Path) -> String {
+    format!(
+        "install-ctl guidance autofix --repo-root {} --apply --yes",
+        repo_root.display()
+    )
+}
+
+fn run_guidance_autofix(repo_root: &Path) -> Result<String, String> {
+    let bin = resolve_install_ctl_bin(repo_root);
+    let mut command = std::process::Command::new(&bin);
+    command
+        .arg("guidance")
+        .arg("autofix")
+        .arg("--repo-root")
+        .arg(repo_root)
+        .arg("--apply")
+        .arg("--yes");
+
+    let output = command.output().map_err(|error| {
+        format!(
+            "failed to launch install-ctl guidance autofix: {error}; try: {}",
+            guidance_autofix_command(repo_root)
+        )
+    })?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let combined = [stdout, stderr].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
+
+    if output.status.success() {
+        Ok(combined)
+    } else {
+        Err(combined)
+    }
+}
+
+fn resolve_install_ctl_bin(repo_root: &Path) -> std::path::PathBuf {
+    let candidates = [
+        std::path::PathBuf::from("install-ctl"),
+        repo_root.join("workflow-tools/target/debug/install-ctl"),
+        repo_root.join("../workflow-tools/target/debug/install-ctl"),
+        repo_root.join("target/debug/install-ctl"),
+        repo_root.join("workflow-tools/target/debug/install-ctl.exe"),
+        repo_root.join("../workflow-tools/target/debug/install-ctl.exe"),
+        repo_root.join("target/debug/install-ctl.exe"),
+    ];
+
+    for candidate in candidates {
+        if candidate.exists() && candidate.is_file() {
+            return candidate;
+        }
+    }
+
+    std::path::PathBuf::from("install-ctl")
+}
+
 fn blocking_link_details(report: &AuditReport) -> String {
     blocking_link_details_from_findings(&report.findings)
 }
@@ -515,7 +654,13 @@ fn run_session_audit(args: &AuditArgs) -> Result<SessionAuditReport, CliRunError
     };
 
     let store = SessionStoreConfig::new(store_root);
-    Ok(store.session_audit(selector)?)
+    let mut report = store.session_audit(selector)?;
+    report.workspace_path = repo_root
+        .to_string_lossy()
+        .replace('\\', "/")
+        .replace("//?/", "")
+        .replace(r"\?\", "");
+    Ok(report)
 }
 
 pub fn error_output(message: &str, format: Option<MachineOutputFormat>) -> String {

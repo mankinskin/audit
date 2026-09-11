@@ -11,7 +11,7 @@ fn links_command_passes_on_clean_guidance_corpus() {
     std::fs::write(temp.path().join("README.md"), "# Repo\n").unwrap();
     std::fs::write(
         temp.path().join(".agents/links.md"),
-        "[good](../README.md)\n",
+        "[good](../README.md)\n[good2](../README.md)\n",
     )
     .unwrap();
 
@@ -21,7 +21,7 @@ fn links_command_passes_on_clean_guidance_corpus() {
     match run(cli).expect("run links") {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["metric"]["blocking_findings"], 0);
-            assert_eq!(value["metric"]["links_checked"], 1);
+            assert_eq!(value["metric"]["links_checked"], 2);
         }
         other => panic!("unexpected output: {other:?}"),
     }
