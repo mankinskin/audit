@@ -82,8 +82,79 @@ enum DestinationShape<'a> {
     Unsupported,
 }
 
+struct LineIndex {
+    newlines: Vec<usize>,
+}
+
+impl LineIndex {
+    fn new(contents: &str) -> Self {
+        let mut newlines = Vec::new();
+        for (offset, &byte) in contents.as_bytes().iter().enumerate() {
+            if byte == b'\n' {
+                newlines.push(offset);
+            }
+        }
+        Self { newlines }
+    }
+
+    #[inline]
+    fn line_number(&self, byte_offset: usize) -> usize {
+        self.newlines.partition_point(|&pos| pos < byte_offset) + 1
+    }
+}
+
+struct GitRepoCache<'a> {
+    repo_root: &'a Path,
+    known_roots: std::collections::HashMap<PathBuf, PathBuf>,
+}
+
+impl<'a> GitRepoCache<'a> {
+    fn new(repo_root: &'a Path) -> Self {
+        Self {
+            repo_root,
+            known_roots: std::collections::HashMap::new(),
+        }
+    }
+
+    fn repository_root(&mut self, path: &Path) -> PathBuf {
+        let parent = path.parent().unwrap_or(self.repo_root);
+        if let Some(cached) = self.known_roots.get(parent) {
+            return cached.clone();
+        }
+
+        let mut current = Some(parent);
+        let mut searched = Vec::new();
+        let mut resolved = self.repo_root.to_path_buf();
+
+        while let Some(candidate) = current {
+            if candidate == self.repo_root {
+                resolved = self.repo_root.to_path_buf();
+                break;
+            }
+            if let Some(cached) = self.known_roots.get(candidate) {
+                resolved = cached.clone();
+                break;
+            }
+            searched.push(candidate.to_path_buf());
+            if candidate.join(".git").exists() {
+                resolved = candidate.to_path_buf();
+                break;
+            }
+            current = candidate.parent();
+        }
+
+        for dir in searched {
+            self.known_roots.insert(dir, resolved.clone());
+        }
+        self.known_roots.insert(parent.to_path_buf(), resolved.clone());
+
+        resolved
+    }
+}
+
 pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResult {
-    let guidance_files = guidance_files(repo_root, exclude_paths);
+    let mut git_cache = GitRepoCache::new(repo_root);
+    let guidance_files = guidance_files_with_cache(repo_root, exclude_paths, &mut git_cache);
     let mut links_checked = 0usize;
     let mut broken_links = 0usize;
     let mut skipped_links = 0usize;
@@ -93,6 +164,7 @@ pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResul
     let mut unsafe_path_links = 0usize;
     let mut unreadable_links = 0usize;
     let mut findings = Vec::new();
+    let mut existence_cache = std::collections::HashMap::<PathBuf, bool>::new();
 
     for file in &guidance_files {
         let source_path = repo_root.join(file);
@@ -101,18 +173,15 @@ pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResul
             findings.push(unreadable_source_finding(file));
             continue;
         };
-        let source_repository = repository_root(repo_root, &source_path);
+        let line_index = LineIndex::new(&contents);
+        let source_repository = git_cache.repository_root(&source_path);
 
         for (event, range) in Parser::new(&contents).into_offset_iter() {
             let Event::Start(Tag::Link { dest_url, .. }) = event else {
                 continue;
             };
             let destination = dest_url.as_ref();
-            let line = contents[..range.start]
-                .bytes()
-                .filter(|byte| *byte == b'\n')
-                .count()
-                + 1;
+            let line = line_index.line_number(range.start);
 
             let local_path = match classify_destination(destination) {
                 DestinationShape::External => {
@@ -146,7 +215,7 @@ pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResul
                 continue;
             }
 
-            let target_repository = repository_root(repo_root, &target_path);
+            let target_repository = git_cache.repository_root(&target_path);
             if target_repository != source_repository {
                 skipped_links += 1;
                 cross_repository_links += 1;
@@ -162,7 +231,16 @@ pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResul
             }
 
             links_checked += 1;
-            if !target_path.exists() {
+            let target_exists = match existence_cache.get(&target_path) {
+                Some(&exists) => exists,
+                None => {
+                    let exists = target_path.exists();
+                    existence_cache.insert(target_path.clone(), exists);
+                    exists
+                }
+            };
+
+            if !target_exists {
                 broken_links += 1;
                 findings.push(missing_target_finding(
                     file,
@@ -450,11 +528,21 @@ fn display_relative(repo_root: &Path, path: &Path) -> String {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn guidance_files(repo_root: &Path, exclude_paths: &[String]) -> Vec<String> {
+    let mut git_cache = GitRepoCache::new(repo_root);
+    guidance_files_with_cache(repo_root, exclude_paths, &mut git_cache)
+}
+
+fn guidance_files_with_cache(
+    repo_root: &Path,
+    exclude_paths: &[String],
+    git_cache: &mut GitRepoCache<'_>,
+) -> Vec<String> {
     let mut walker = WalkBuilder::new(repo_root);
     walker.standard_filters(true).hidden(false);
-    let repo_root = repo_root.to_path_buf();
-    let filter_root = repo_root.clone();
+    let filter_root = repo_root.to_path_buf();
     let exclude_paths = exclude_paths.to_vec();
     walker.filter_entry(move |entry| {
         let Ok(relative_path) = entry.path().strip_prefix(&filter_root) else {
@@ -463,39 +551,65 @@ fn guidance_files(repo_root: &Path, exclude_paths: &[String]) -> Vec<String> {
         !is_excluded_path(relative_path, &exclude_paths)
     });
 
-    walker
-        .build()
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            entry
-                .file_type()
-                .is_some_and(|file_type| file_type.is_file())
-        })
-        .filter_map(|entry| {
-            let relative = entry.path().strip_prefix(&repo_root).ok()?;
-            let relative = relative.to_string_lossy().replace('\\', "/");
-            (repository_root(&repo_root, entry.path()) == repo_root
-                && is_guidance_markdown(&relative))
-            .then_some(relative)
-        })
-        .collect()
+    let mut files = Vec::new();
+    for entry in walker.build().filter_map(Result::ok) {
+        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
+            continue;
+        }
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(relative) = path.strip_prefix(repo_root) else {
+            continue;
+        };
+        let relative_str = relative.to_string_lossy().replace('\\', "/");
+        if is_guidance_markdown(&relative_str) && git_cache.repository_root(path) == repo_root {
+            files.push(relative_str);
+        }
+    }
+    files
 }
 
 fn is_excluded_path(path: &Path, exclude_paths: &[String]) -> bool {
-    if path.components().any(|component| {
-        matches!(
-            component.as_os_str().to_string_lossy().as_ref(),
-            ".git" | "target" | "node_modules" | ".audit" | ".idea" | ".vscode"
-        )
-    }) {
-        return true;
+    if let Some(file_name) = path.file_name().and_then(|name| name.to_str()) {
+        if matches!(
+            file_name,
+            ".git"
+                | "target"
+                | "node_modules"
+                | ".audit"
+                | ".idea"
+                | ".vscode"
+                | ".ticket"
+                | ".spec"
+                | ".rule"
+                | ".test"
+                | ".session"
+                | ".feedback"
+                | ".worktrees"
+                | ".cargo"
+                | "dist"
+                | "build"
+        ) {
+            return true;
+        }
     }
 
-    let path = path.to_string_lossy().replace('\\', "/");
-    exclude_paths.iter().any(|excluded| {
-        let excluded = excluded.trim_matches('/');
-        !excluded.is_empty() && (path == excluded || path.starts_with(&format!("{excluded}/")))
-    })
+    if !exclude_paths.is_empty() {
+        let path_str = path.to_string_lossy();
+        let normalized = path_str.replace('\\', "/");
+        let trimmed = normalized.trim_matches('/');
+        if exclude_paths.iter().any(|excluded| {
+            let excluded = excluded.trim_matches('/');
+            !excluded.is_empty()
+                && (trimmed == excluded || trimmed.starts_with(&format!("{excluded}/")))
+        }) {
+            return true;
+        }
+    }
+
+    false
 }
 
 fn is_guidance_markdown(path: &str) -> bool {
@@ -508,6 +622,8 @@ fn is_guidance_markdown(path: &str) -> bool {
             || path.contains("/.agents/"))
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn repository_root(repo_root: &Path, path: &Path) -> PathBuf {
     let mut current = path.parent();
     while let Some(candidate) = current {

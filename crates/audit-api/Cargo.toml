@@ -36,3 +36,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "move_health"
 harness = false
+
+[[bench]]
+name = "markdown_links"
+harness = false
