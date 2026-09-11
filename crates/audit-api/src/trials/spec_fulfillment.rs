@@ -16,6 +16,7 @@ use crate::{
         SpecFulfillmentSummary,
         TrialStatus,
     },
+    trials::store_scope::store_root_within,
 };
 
 pub struct SpecFulfillmentResult {
@@ -90,7 +91,17 @@ pub fn evaluate(repo_root: &Path) -> SpecFulfillmentResult {
 fn prepare_spec_store(
     repo_root: &Path
 ) -> Result<spec_api::SpecStore, SpecFulfillmentResult> {
-    let mut store = match SpecStore::open(repo_root) {
+    let Some(store_root) = store_root_within(repo_root, ".spec") else {
+        return Err(SpecFulfillmentResult {
+            metric: SpecFulfillmentSummary::unavailable(format!(
+                "no spec store inside {}; skipping spec fulfillment audit",
+                format_output_path(repo_root)
+            )),
+            findings: Vec::new(),
+        });
+    };
+
+    let mut store = match SpecStore::open(&store_root) {
         Ok(store) => store,
         Err(SpecError::Storage(StorageError::WorkspaceNotFound { path })) => {
             return Err(SpecFulfillmentResult {

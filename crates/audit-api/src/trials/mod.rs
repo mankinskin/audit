@@ -6,4 +6,5 @@ pub mod repository_guidance;
 pub mod session_workflow_graph;
 pub mod spec_fulfillment;
 pub mod static_metrics;
+pub mod store_scope;
 pub mod ticket_graph;

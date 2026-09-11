@@ -31,6 +31,7 @@ use crate::{
         Severity,
         TrialStatus,
     },
+    trials::store_scope::store_root_within,
 };
 
 pub struct TicketGraphResult {
@@ -165,7 +166,17 @@ pub fn evaluate(repo_root: &Path) -> TicketGraphResult {
 fn open_ticket_store(
     repo_root: &Path
 ) -> Result<TicketStore, TicketGraphResult> {
-    match TicketStore::open(repo_root) {
+    let Some(store_root) = store_root_within(repo_root, ".ticket") else {
+        return Err(TicketGraphResult {
+            metric: CountMetric::unavailable(format!(
+                "no ticket store inside {}; skipping ticket dependency topology audit",
+                format_output_path(repo_root)
+            )),
+            findings: Vec::new(),
+        });
+    };
+
+    match TicketStore::open(&store_root) {
         Ok(store) => Ok(store),
         Err(StorageError::WorkspaceNotFound { path }) =>
             Err(TicketGraphResult {

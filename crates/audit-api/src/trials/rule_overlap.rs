@@ -5,11 +5,14 @@ use std::{
 
 use serde_json::json;
 
-use crate::models::{
-    AuditFinding,
-    RuleOverlapSummary,
-    Severity,
-    TrialStatus,
+use crate::{
+    models::{
+        AuditFinding,
+        RuleOverlapSummary,
+        Severity,
+        TrialStatus,
+    },
+    trials::store_scope::store_root_within,
 };
 
 const HIGH_OVERLAP_THRESHOLD: f64 = 0.80;
@@ -23,7 +26,17 @@ pub struct RuleOverlapResult {
 }
 
 pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
-    let mut store = match rule_api::RuleStore::open(repo_root) {
+    let Some(store_root) = store_root_within(repo_root, ".rule") else {
+        return RuleOverlapResult {
+            metric: RuleOverlapSummary::unavailable(format!(
+                "no rule store inside {}; skipping rule-overlap audit",
+                memory_kernel::workspace::normalize_path_for_display(repo_root)
+            )),
+            findings: Vec::new(),
+        };
+    };
+
+    let mut store = match rule_api::RuleStore::open(&store_root) {
         Ok(store) => store,
         Err(rule_api::error::RuleError::Storage(
             memory_kernel::error::StorageError::WorkspaceNotFound { path },
