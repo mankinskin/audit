@@ -1,0 +1,9 @@
+{"rev":1,"ts":"2026-04-09T15:24:41.155334200+00:00","fields":{"priority":"high","state":"open","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-04-09T15:25:45.713948900+00:00","fields":{"priority":"high","state":"open","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-04-14T04:02:39.726211900+00:00","fields":{"priority":"high","state":"open","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-04-14T04:02:45.669972100+00:00","fields":{"priority":"high","state":"in-refinement","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-04-14T04:02:45.847765+00:00","fields":{"priority":"high","state":"planned","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":6,"ts":"2026-04-14T04:02:46.261513900+00:00","fields":{"priority":"high","state":"in-implementation","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":7,"ts":"2026-04-14T04:02:46.431861100+00:00","fields":{"priority":"high","state":"in-review","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":8,"ts":"2026-04-14T04:02:46.800776+00:00","fields":{"priority":"high","state":"in-validation","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}
+{"rev":9,"ts":"2026-04-14T04:02:46.973723600+00:00","fields":{"priority":"high","state":"done","title":"[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries","type":"tracker-improvement"}}

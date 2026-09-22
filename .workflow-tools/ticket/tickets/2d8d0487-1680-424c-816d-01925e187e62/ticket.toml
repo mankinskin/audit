@@ -1,0 +1,7 @@
+id = "2d8d0487-1680-424c-816d-01925e187e62"
+created_at = "2026-07-09T15:37:02.161491100+00:00"
+title = "[session-api][audit-cli] Add session_audit in unified audit interface with schema-versioned sessions"
+state = "done"
+depends_on = ["2663a981-d279-45dc-abc0-42270491dca6", "5e99cc3e-5b9e-4ca1-a54c-cbdf82444b50", "627d4152-36a7-4b24-9a9c-5f047abcac60", "f1161fae-b1fc-4cc1-baae-18c0eb7e7868"]
+type = "tracker-improvement"
+component = "audit"

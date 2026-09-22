@@ -1,0 +1,4 @@
+{"rev":1,"ts":"2026-07-09T15:37:02.438240800+00:00","fields":{"state":"open","title":"[session-api][audit-cli] Define spec contract for session_audit and session schema version","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-07-09T15:37:26.522518600+00:00","fields":{"state":"in-implementation","title":"[session-api][audit-cli] Define spec contract for session_audit and session schema version","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-07-09T15:45:46.104577100+00:00","fields":{"state":"in-review","title":"[session-api][audit-cli] Define spec contract for session_audit and session schema version","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-07-09T15:45:46.317966300+00:00","fields":{"state":"done","title":"[session-api][audit-cli] Define spec contract for session_audit and session schema version","type":"tracker-improvement"}}

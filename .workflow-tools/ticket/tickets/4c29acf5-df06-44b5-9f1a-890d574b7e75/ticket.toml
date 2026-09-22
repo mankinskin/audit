@@ -1,0 +1,7 @@
+id = "4c29acf5-df06-44b5-9f1a-890d574b7e75"
+created_at = "2026-04-13T14:57:53.189656800+00:00"
+title = "[Board][Docs] Add board workflow guidance to .github agent files"
+state = "done"
+priority = "medium"
+type = "tracker-improvement"
+component = "audit"

@@ -1,0 +1,6 @@
+id = "5e99cc3e-5b9e-4ca1-a54c-cbdf82444b50"
+created_at = "2026-07-09T15:37:02.365014500+00:00"
+title = "[session-api][audit-cli] Define spec contract for session_audit and session schema version"
+state = "done"
+type = "tracker-improvement"
+component = "audit"

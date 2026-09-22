@@ -1,0 +1,7 @@
+id = "aaa90ee6-1358-41ad-b19e-61abdc3f1dc2"
+created_at = "2026-06-02T15:00:57.417536700+00:00"
+title = "[workflow] Store-owned spec evidence integration"
+state = "done"
+depends_on = ["618f6ce4-e7b3-48f2-9c9e-840247a119da", "635b7e37-8bed-4622-a38d-ef87bb08f46c"]
+type = "tracker-improvement"
+component = "audit"

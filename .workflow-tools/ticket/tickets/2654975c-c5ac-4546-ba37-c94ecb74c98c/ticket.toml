@@ -1,0 +1,6 @@
+id = "2654975c-c5ac-4546-ba37-c94ecb74c98c"
+created_at = "2026-09-15T15:05:57.915778200+00:00"
+title = "Adopt Entity Kernel in audit hybrid domain"
+state = "done"
+type = "task"
+component = "audit"

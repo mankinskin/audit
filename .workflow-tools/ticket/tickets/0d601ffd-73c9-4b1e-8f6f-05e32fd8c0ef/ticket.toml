@@ -1,0 +1,8 @@
+id = "0d601ffd-73c9-4b1e-8f6f-05e32fd8c0ef"
+created_at = "2026-06-24T12:53:04.643405100+00:00"
+title = "[memory-index] Audit index auto-rerun on file changes via git hooks"
+state = "planning"
+component = "audit"
+effort = "1600"
+priority = "medium"
+type = "tracker-improvement"

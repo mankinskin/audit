@@ -1,0 +1,7 @@
+{"rev":1,"ts":"2026-06-03T15:58:00.979935600+00:00","fields":{"state":"open","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-06-03T15:58:01.202340300+00:00","fields":{"state":"planned","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-06-03T15:58:01.417482+00:00","fields":{"state":"in-implementation","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-06-03T16:00:08.843232700+00:00","fields":{"state":"in-review","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-06-30T13:17:54.496040900+00:00","fields":{"state":"in-implementation","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":6,"ts":"2026-07-01T01:10:04.151858+00:00","fields":{"state":"in-review","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"}}
+{"rev":7,"ts":"2026-07-03T12:39:01.152907700+00:00","fields":{"state":"done","title":"[repo-guidance][rule-api] Add implement agent target from canonical rules","type":"tracker-improvement"},"author":"github-copilot"}

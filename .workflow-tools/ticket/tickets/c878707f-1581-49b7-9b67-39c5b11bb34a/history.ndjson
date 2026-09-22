@@ -1,0 +1,1 @@
+{"rev":1,"ts":"2026-07-29T17:23:48.081779200+00:00","fields":{"state":"open","title":"rule_overlap trial test fails: RuleStore::init picks up state outside its tempdir, causing DuplicateSlug on first insert","type":"bug"}}

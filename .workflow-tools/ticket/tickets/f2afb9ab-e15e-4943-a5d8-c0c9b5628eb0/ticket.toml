@@ -1,0 +1,6 @@
+id = "f2afb9ab-e15e-4943-a5d8-c0c9b5628eb0"
+created_at = "2026-05-05T20:28:29.730557700+00:00"
+title = "Add exclude-path config for repository QA tool"
+state = "done"
+type = "tracker-improvement"
+component = "audit"

@@ -1,0 +1,7 @@
+id = "c96f325f-5b45-4f2d-aed6-85648106d3ea"
+created_at = "2026-07-14T14:09:57.910912+00:00"
+title = "[audit instructions] Focus audit guidance on executing target-context audits and canonical findings summaries"
+state = "done"
+effort = "1200"
+type = "tracker-improvement"
+component = "audit"

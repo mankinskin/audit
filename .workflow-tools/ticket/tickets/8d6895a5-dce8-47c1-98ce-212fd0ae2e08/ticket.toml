@@ -1,0 +1,6 @@
+id = "8d6895a5-dce8-47c1-98ce-212fd0ae2e08"
+created_at = "2026-06-02T18:39:32.446453400+00:00"
+title = "[viewer-api][audit] Fix viewer-api-dioxus compile failure and restore llvm-cov coverage collection"
+state = "done"
+type = "tracker-improvement"
+component = "audit"

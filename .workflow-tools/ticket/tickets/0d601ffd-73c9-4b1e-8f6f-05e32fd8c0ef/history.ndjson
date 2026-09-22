@@ -1,0 +1,1 @@
+{"rev":1,"ts":"2026-06-24T12:53:04.705827400+00:00","fields":{"component":"audit-api","effort":"1600","priority":"medium","state":"open","title":"[memory-index] Audit index auto-rerun on file changes via git hooks","type":"tracker-improvement"}}

@@ -1,0 +1,10 @@
+id = "d51ae405-fe57-484e-b1a4-8254e98a0a6d"
+created_at = "2026-09-15T14:39:15.201107200+00:00"
+title = "Implement Entity Kernel across all domains"
+state = "done"
+depends_on = ["3c28add4-f4bf-4596-82b6-082ddc9406a0"]
+effort = "12000"
+parts = [{ id = "7056e02e-01f6-4524-969c-aeee86789c3d", kind = "objective", path = "parts/7056e02e-01f6-4524-969c-aeee86789c3d.md", frozen = true, created_at = "2026-09-15T15:18:59.741419600Z" }, { id = "820d51ed-5720-44e0-b4c5-100a9f8aa5b7", kind = "requirements", path = "parts/820d51ed-5720-44e0-b4c5-100a9f8aa5b7.md", frozen = true, created_at = "2026-09-15T15:18:59.741722100Z" }, { id = "d9966c6a-9dc3-4350-b5fc-facee62ca639", kind = "design", path = "parts/d9966c6a-9dc3-4350-b5fc-facee62ca639.md", frozen = true, created_at = "2026-09-15T15:18:59.742440700Z" }, { id = "d5bdd299-ea2b-45cf-8c50-66c30c231135", kind = "examples", path = "parts/d5bdd299-ea2b-45cf-8c50-66c30c231135.md", frozen = true, created_at = "2026-09-15T15:18:59.742953400Z" }, { id = "f4cd012a-17df-4cf5-8c1c-d70e4109fdfa", kind = "acceptance_criteria", path = "parts/f4cd012a-17df-4cf5-8c1c-d70e4109fdfa.md", frozen = true, created_at = "2026-09-15T15:18:59.743366Z" }]
+plan_revision = 1
+type = "epic"
+component = "audit"

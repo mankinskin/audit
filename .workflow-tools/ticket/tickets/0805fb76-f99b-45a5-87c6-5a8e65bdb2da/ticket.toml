@@ -1,0 +1,8 @@
+id = "0805fb76-f99b-45a5-87c6-5a8e65bdb2da"
+created_at = "2026-06-02T15:26:28.169998700+00:00"
+title = "[log-api] Bootstrap validation-log identities for spec fulfillment"
+state = "done"
+depends_on = ["86bf3da2-b6cc-4fc7-898d-044403283550"]
+effort = "2600"
+type = "tracker-improvement"
+component = "audit"

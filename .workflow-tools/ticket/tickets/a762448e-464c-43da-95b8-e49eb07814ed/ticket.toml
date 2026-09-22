@@ -1,0 +1,10 @@
+id = "a762448e-464c-43da-95b8-e49eb07814ed"
+created_at = "2026-05-20T20:45:35.168842700+00:00"
+title = "[audit-api] Require every ticket to participate in dependency graph"
+state = "done"
+component = "audit"
+parts = [{ id = "a06b48d5-527c-49f2-b305-6bcefe0be466", kind = "objective", path = "parts/a06b48d5-527c-49f2-b305-6bcefe0be466.md", frozen = false, created_at = "2026-07-30T21:05:26.267607200Z" }, { id = "02f46628-395b-409f-b292-7d85edcedc12", kind = "validation", path = "parts/02f46628-395b-409f-b292-7d85edcedc12.md", frozen = false, created_at = "2026-07-30T21:05:26.271197800Z" }]
+priority = "high"
+risk_level = "medium"
+spec_refs = "a6318461-3a06-4d6d-aabb-7e06c33f4e1b"
+type = "tracker-improvement"

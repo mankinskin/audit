@@ -1,0 +1,7 @@
+id = "d3f76335-15de-40e7-97ef-18c400e32268"
+created_at = "2026-04-09T14:35:45.696788400+00:00"
+title = "[AOH][Design] Local-first git management — branch lifecycle without remote dependency"
+state = "done"
+priority = "high"
+type = "tracker-improvement"
+component = "audit"

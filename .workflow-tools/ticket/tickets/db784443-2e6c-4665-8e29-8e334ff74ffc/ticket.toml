@@ -1,0 +1,7 @@
+id = "db784443-2e6c-4665-8e29-8e334ff74ffc"
+created_at = "2026-04-09T15:24:40.312022700+00:00"
+title = "[AOH][Design] Operator authorization, secret lifecycle, and trust boundaries"
+state = "done"
+priority = "high"
+type = "tracker-improvement"
+component = "audit"

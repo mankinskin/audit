@@ -1,0 +1,10 @@
+id = "2318f63f-7113-4987-87b7-ca26afa04d11"
+created_at = "2026-07-15T11:21:25.576443600+00:00"
+title = "[mcp] Report unique server identities for local Copilot registrations"
+state = "done"
+component = "audit"
+effort = "1600"
+parts = [{ id = "0908d76c-56d3-4ed3-9523-bbcb05918579", kind = "objective", path = "parts/0908d76c-56d3-4ed3-9523-bbcb05918579.md", frozen = false, created_at = "2026-07-30T21:02:31.485203300Z" }, { id = "1cdef00f-71d9-45b8-931c-8f50aca009cb", kind = "validation", path = "parts/1cdef00f-71d9-45b8-931c-8f50aca009cb.md", frozen = false, created_at = "2026-07-30T21:02:31.488791100Z" }, { id = "4beb2f8d-2972-473d-9672-a8a462fa15a2", kind = "objective", path = "parts/4beb2f8d-2972-473d-9672-a8a462fa15a2.md", frozen = false, created_at = "2026-07-30T21:02:31.492673800Z" }]
+priority = "high"
+risk_level = "low"
+type = "tracker-improvement"

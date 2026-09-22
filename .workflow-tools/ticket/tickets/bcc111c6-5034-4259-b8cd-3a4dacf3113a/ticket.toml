@@ -1,0 +1,8 @@
+id = "bcc111c6-5034-4259-b8cd-3a4dacf3113a"
+created_at = "2026-04-09T19:45:51.101813300+00:00"
+title = "[Board] ticket-cli: board subcommand family (show, check-in, check-out, heartbeat, clean)"
+state = "done"
+depends_on = ["0db86ac1-45ca-49a6-abc7-dd30b5adbee7", "b72b0a40-496e-43d0-a5b3-ec358d85802b"]
+priority = "medium"
+type = "tracker-improvement"
+component = "audit"

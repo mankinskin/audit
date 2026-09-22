@@ -1,0 +1,7 @@
+{"rev":1,"ts":"2026-04-09T20:48:06.432289700+00:00","fields":{"priority":"high","state":"open","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-04-09T20:49:35.736826900+00:00","fields":{"priority":"high","state":"in-refinement","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-04-12T16:46:50.000414+00:00","fields":{"priority":"high","state":"planned","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-04-12T17:58:57.790734100+00:00","fields":{"priority":"high","state":"in-implementation","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-04-12T17:58:58.053449900+00:00","fields":{"priority":"high","state":"in-review","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":6,"ts":"2026-04-12T17:58:58.155269900+00:00","fields":{"priority":"high","state":"in-validation","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}
+{"rev":7,"ts":"2026-04-12T17:58:58.250718500+00:00","fields":{"priority":"high","state":"done","title":"[Board][Design] Entry identity, resume flow, and synchronization invariants","type":"tracker-improvement"}}

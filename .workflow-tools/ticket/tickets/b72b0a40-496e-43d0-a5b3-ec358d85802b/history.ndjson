@@ -1,0 +1,11 @@
+{"rev":1,"ts":"2026-04-12T18:36:25.678911100+00:00","fields":{"state":"open","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-04-12T18:36:32.670787300+00:00","fields":{"priority":"high","state":"open","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-04-12T18:37:53.735031100+00:00","fields":{"priority":"high","state":"in-refinement","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-04-12T18:37:54.087555900+00:00","fields":{"priority":"high","state":"planned","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-04-13T10:37:45.027344700+00:00","fields":{"priority":"high","state":"planned","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":6,"ts":"2026-04-13T10:37:48.510077600+00:00","fields":{"priority":"high","state":"planned","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":7,"ts":"2026-04-13T10:37:51.702363100+00:00","fields":{"priority":"high","state":"planned","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":8,"ts":"2026-04-13T10:37:54.659110+00:00","fields":{"priority":"high","state":"in-implementation","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":9,"ts":"2026-04-13T10:37:54.828850700+00:00","fields":{"priority":"high","state":"in-review","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":10,"ts":"2026-04-13T10:37:55.002662+00:00","fields":{"priority":"high","state":"in-validation","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}
+{"rev":11,"ts":"2026-04-13T10:37:55.203246500+00:00","fields":{"priority":"high","state":"done","title":"[Board] ticket-api: Cleanup, file ops, reconciliation, claim deprecation","type":"tracker-improvement"}}

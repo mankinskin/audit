@@ -1,0 +1,5 @@
+{"rev":1,"ts":"2026-05-05T19:28:08.653189700+00:00","fields":{"state":"open","title":"Add CLI surface for repository QA tool","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-05-05T19:28:20.430294+00:00","fields":{"state":"planned","title":"Add CLI surface for repository QA tool","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-05-05T19:28:20.588164800+00:00","fields":{"state":"in-implementation","title":"Add CLI surface for repository QA tool","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-05-05T19:31:19.374845400+00:00","fields":{"state":"in-review","title":"Add CLI surface for repository QA tool","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-05-05T19:31:19.512376300+00:00","fields":{"state":"done","title":"Add CLI surface for repository QA tool","type":"tracker-improvement"}}

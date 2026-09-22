@@ -1,0 +1,7 @@
+id = "c3143e3c-2d16-447a-9062-14305a31b786"
+created_at = "2026-04-09T20:48:06.591217800+00:00"
+title = "[Board][Design] Stale-entry review, cleanup approval, and conflict resolution workflow"
+state = "done"
+priority = "high"
+type = "tracker-improvement"
+component = "audit"

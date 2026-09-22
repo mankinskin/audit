@@ -1,0 +1,7 @@
+id = "f1161fae-b1fc-4cc1-baae-18c0eb7e7868"
+created_at = "2026-07-09T15:37:03.300462800+00:00"
+title = "[session-api][audit-cli] Validate session_audit feature and evidence package"
+state = "done"
+depends_on = ["2663a981-d279-45dc-abc0-42270491dca6", "627d4152-36a7-4b24-9a9c-5f047abcac60"]
+type = "tracker-improvement"
+component = "audit"

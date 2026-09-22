@@ -1,0 +1,5 @@
+{"rev":1,"ts":"2026-07-06T04:11:08.172291200+00:00","fields":{"state":"open","title":"[audit-roadmap][stability][dead_code] viewer-api dead_code triage","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-07-06T10:04:33.298502500+00:00","fields":{"state":"in-implementation","title":"[audit-roadmap][stability][dead_code] viewer-api dead_code triage","type":"tracker-improvement"},"author":"copilot-opus48"}
+{"rev":3,"ts":"2026-07-06T10:07:00.601298600+00:00","fields":{"state":"in-implementation","title":"[audit-roadmap][stability][dead_code] viewer-api dead_code triage","type":"tracker-improvement"},"author":"copilot-opus48"}
+{"rev":4,"ts":"2026-07-06T10:07:01.267332500+00:00","fields":{"state":"in-review","title":"[audit-roadmap][stability][dead_code] viewer-api dead_code triage","type":"tracker-improvement"},"author":"copilot-opus48"}
+{"rev":5,"ts":"2026-07-06T10:10:29.766756700+00:00","fields":{"state":"done","title":"[audit-roadmap][stability][dead_code] viewer-api dead_code triage","type":"tracker-improvement"}}

@@ -1,0 +1,6 @@
+id = "bf8ef22e-ea06-45de-9f90-a2fee0e4cc6e"
+created_at = "2026-06-03T15:58:00.927840300+00:00"
+title = "[repo-guidance][rule-api] Add implement agent target from canonical rules"
+state = "done"
+type = "tracker-improvement"
+component = "audit"

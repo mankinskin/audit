@@ -1,0 +1,8 @@
+id = "f49fbb27-8b76-4f56-85d3-6e7365aa4a45"
+created_at = "2026-08-05T13:49:27.012590900+00:00"
+title = "Define adaptive performance baseline for spec 18b6a9c5"
+state = "planning"
+component = "audit"
+effort = "4000"
+priority = "high"
+type = "task"

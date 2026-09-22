@@ -1,0 +1,9 @@
+id = "f6ee97de-c7c9-46d3-878b-c6df5f4a4bc9"
+created_at = "2026-06-17T15:58:20+00:00"
+title = "[audit-api] Score-model versioning and anti-gaming safeguards"
+state = "planning"
+depends_on = ["67b6117b-5978-4c89-9cd4-4c8b043f4fba"]
+effort = "550"
+priority = "high"
+type = "tracker-improvement"
+component = "audit"

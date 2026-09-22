@@ -1,0 +1,8 @@
+id = "ec52f7cb-7c5e-4854-84d3-80618167762d"
+created_at = "2026-04-09T19:45:57.148590800+00:00"
+title = "[Board] ticket-mcp: Board tool endpoints for agent coordination"
+state = "done"
+depends_on = ["0db86ac1-45ca-49a6-abc7-dd30b5adbee7", "b72b0a40-496e-43d0-a5b3-ec358d85802b"]
+priority = "medium"
+type = "tracker-improvement"
+component = "audit"

@@ -1,0 +1,9 @@
+id = "1aa6119a-1059-4412-9d21-77c125608d22"
+created_at = "2026-06-24T11:33:51.281834600+00:00"
+title = "[memory-index] Audit index: per-finding entries sorted by severity, clickable file links, collapsible severity sections"
+state = "planning"
+component = "audit"
+depends_on = ["855a1e5d-d998-4caf-b60c-d75a13ca3264"]
+effort = "2800"
+priority = "medium"
+type = "tracker-improvement"

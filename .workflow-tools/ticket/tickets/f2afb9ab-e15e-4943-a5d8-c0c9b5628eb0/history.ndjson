@@ -1,0 +1,5 @@
+{"rev":1,"ts":"2026-05-05T20:28:29.791966400+00:00","fields":{"state":"open","title":"Add exclude-path config for repository QA tool","type":"tracker-improvement"}}
+{"rev":2,"ts":"2026-05-05T20:28:36.022277800+00:00","fields":{"state":"planned","title":"Add exclude-path config for repository QA tool","type":"tracker-improvement"}}
+{"rev":3,"ts":"2026-05-05T20:28:36.177348+00:00","fields":{"state":"in-implementation","title":"Add exclude-path config for repository QA tool","type":"tracker-improvement"}}
+{"rev":4,"ts":"2026-05-05T22:21:41.409956700+00:00","fields":{"state":"in-review","title":"Add exclude-path config for repository QA tool","type":"tracker-improvement"}}
+{"rev":5,"ts":"2026-05-05T22:21:41.712103900+00:00","fields":{"state":"done","title":"Add exclude-path config for repository QA tool","type":"tracker-improvement"}}

@@ -1,0 +1,1 @@
+Adopt the Entity Kernel in audit's hybrid boundary. Persisted finding entity folders may use kernel entity metadata and migration contracts; repository-level SQLite indexes and generated catalogs remain projections. Preserve audit behavior and validate move/finding-entity compatibility plus workspace capability reporting.
