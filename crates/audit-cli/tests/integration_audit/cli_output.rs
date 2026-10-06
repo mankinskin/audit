@@ -1,4 +1,5 @@
 use assert_cmd::Command;
+use rusqlite::Connection;
 use audit_cli::cli::{
     CliOutput,
     parse_cli_from,
@@ -88,6 +89,48 @@ fn cli_supports_json_and_text_output() {
         .assert()
         .success()
         .stdout(predicates::str::contains("Repository Audit"));
+}
+
+#[test]
+fn cli_dot_repo_root_reads_back_from_canonical_audit_store() {
+    let dir = tempdir().expect("temp root");
+    let selected = dir.path().join("selected");
+    std::fs::create_dir_all(selected.join("src")).expect("create selected workspace");
+    std::fs::write(selected.join("README.md"), "audit selector fixture\n")
+        .expect("write source file");
+
+    let output = Command::cargo_bin("audit")
+        .expect("audit binary")
+        .current_dir(&selected)
+        .args(["run", ".", "--json"])
+        .output()
+        .expect("run audit CLI");
+    assert!(
+        output.status.success(),
+        "audit CLI failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("parse audit report");
+    let run_id = report["run"]["run_id"]
+        .as_i64()
+        .expect("audit report contains run id");
+    let canonical_store = selected.join(".workflow-tools").join("audit");
+    let connection = Connection::open(canonical_store.join("audit.sqlite3"))
+        .expect("open canonical audit database");
+    let persisted: (String, String) = connection
+        .query_row(
+            "SELECT repo_root, status FROM audit_runs WHERE run_id = ?1",
+            [run_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read audit run by returned id");
+
+    assert_eq!(persisted.0, report["repo_root"].as_str().unwrap());
+    assert_eq!(persisted.1, "completed");
+    assert!(!selected.join(".audit").exists());
+    assert!(!dir.path().join(".workflow-tools").join("audit").exists());
 }
 
 #[test]

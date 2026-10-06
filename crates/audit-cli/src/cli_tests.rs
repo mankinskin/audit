@@ -68,6 +68,28 @@ fn run_command_fails_when_guidance_links_are_blocking() {
 }
 
 #[test]
+fn audit_write_commands_require_explicit_repository_roots() {
+    for args in [
+        vec!["audit", "run"],
+        vec!["audit", "summary", "category"],
+        vec!["audit", "hook"],
+        vec!["audit", "store-index"],
+    ] {
+        assert!(parse_cli_from(args).is_err());
+    }
+}
+
+#[test]
+fn audit_run_rejects_ambient_repository_aliases_before_store_init() {
+    let temp = tempdir().unwrap();
+    let cli = parse_cli_from(["audit", "run", "default"]).expect("parse run");
+
+    let error = run(cli).expect_err("ambient alias must be rejected");
+    assert!(error.to_string().contains("invalid workspace selector"));
+    assert!(!temp.path().join(".workflow-tools/audit").exists());
+}
+
+#[test]
 fn parses_move_command() {
     let cli = parse_cli_from([
         "audit",
@@ -130,6 +152,42 @@ fn move_plans_blocked_when_audit_entity_has_no_folder() {
             assert!(value["plan"]["blockers"].as_array().unwrap().len() > 0);
         }
         other => panic!("unexpected output: {other:?}"),
+    }
+}
+
+#[test]
+fn move_rejects_ambient_workspace_aliases() {
+    let temp = tempdir().unwrap();
+    let repo_root = temp.path().join("repo");
+    std::fs::create_dir_all(&repo_root).unwrap();
+    std::process::Command::new("git")
+        .current_dir(&repo_root)
+        .args(["init"])
+        .status()
+        .expect("git init")
+        .success()
+        .then_some(())
+        .expect("git init failed");
+    RepositoryIndex::init(&repo_root).unwrap();
+
+    for selector in ["", "  ", "default", ".."] {
+        let mut cli = parse_cli_from([
+            "audit",
+            "--json",
+            "move",
+            "7b3a7c62-1f3f-45d6-b8a1-f2b83e3d9f71",
+            "--repo-root",
+            repo_root.to_string_lossy().as_ref(),
+            "--to-workspace-root",
+            ".",
+        ])
+        .expect("parse move");
+        if let AuditCommand::Move(args) = &mut cli.command {
+            args.to_workspace_root = Some(PathBuf::from(selector));
+        }
+
+        assert!(run(cli).is_err(), "selector {selector:?} must be rejected");
+        assert!(!temp.path().join(".workflow-tools").exists());
     }
 }
 

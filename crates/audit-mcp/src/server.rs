@@ -136,6 +136,23 @@ impl AuditServer {
         repo_root.unwrap_or_else(|| self.base_dir.clone())
     }
 
+    fn explicit_repo_root(repo_root: Option<PathBuf>) -> Result<PathBuf, McpError> {
+        let repo_root = repo_root.ok_or_else(|| {
+            McpError::invalid_params(
+                "repo_root is required for audit writes; provide an explicit workspace path",
+                None,
+            )
+        })?;
+        let selector = repo_root.to_string_lossy();
+        memory_kernel::workspace::normalize_explicit_workspace_selector(Some(&selector))
+            .map_err(|error| McpError::invalid_params(error.to_string(), None))
+    }
+
+    fn normalize_target_workspace(selector: &str) -> Result<PathBuf, McpError> {
+        memory_kernel::workspace::normalize_explicit_workspace_selector(Some(selector))
+            .map_err(|err| McpError::invalid_params(err.to_string(), None))
+    }
+
     fn json_result<T: Serialize>(
         value: &T
     ) -> Result<CallToolResult, McpError> {
@@ -176,9 +193,8 @@ impl AuditServer {
         &self,
         Parameters(input): Parameters<AuditRepositoryInput>,
     ) -> Result<CallToolResult, McpError> {
+        let repo_root = Self::explicit_repo_root(input.repo_root)?;
         let _guard = self.audit_lock.lock().await;
-        let repo_root =
-            input.repo_root.unwrap_or_else(|| self.base_dir.clone());
         let config = Self::build_config(
             input.max_file_lines,
             input.max_cyclomatic_complexity,
@@ -199,9 +215,8 @@ impl AuditServer {
         &self,
         Parameters(input): Parameters<AuditSummaryInput>,
     ) -> Result<CallToolResult, McpError> {
+        let repo_root = Self::explicit_repo_root(input.repo_root)?;
         let _guard = self.audit_lock.lock().await;
-        let repo_root =
-            input.repo_root.unwrap_or_else(|| self.base_dir.clone());
         let config = Self::build_config(
             input.max_file_lines,
             input.max_cyclomatic_complexity,
@@ -225,6 +240,8 @@ impl AuditServer {
         Parameters(input): Parameters<AuditMoveInput>,
     ) -> Result<CallToolResult, McpError> {
         let _guard = self.audit_lock.lock().await;
+        let target_workspace_root =
+            Self::normalize_target_workspace(&input.to_workspace_root)?;
         let repo_root = self.repo_root(input.repo_root);
         let audit_id = input.id.parse::<Uuid>().map_err(|error| {
             McpError::invalid_params(
@@ -232,7 +249,6 @@ impl AuditServer {
                 None,
             )
         })?;
-        let target_workspace_root = PathBuf::from(input.to_workspace_root);
         let report = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?
             .plan_move_preflight(&audit_id, &target_workspace_root)
@@ -258,14 +274,15 @@ impl AuditServer {
         Parameters(input): Parameters<AuditMoveInput>,
     ) -> Result<CallToolResult, McpError> {
         let _guard = self.audit_lock.lock().await;
-        let repo_root = self.repo_root(input.repo_root);
+        let target_workspace_root =
+            Self::normalize_target_workspace(&input.to_workspace_root)?;
+        let repo_root = Self::explicit_repo_root(input.repo_root)?;
         let audit_id = input.id.parse::<Uuid>().map_err(|error| {
             McpError::invalid_params(
                 format!("invalid audit UUID: {error}"),
                 None,
             )
         })?;
-        let target_workspace_root = PathBuf::from(input.to_workspace_root);
         let index = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?;
         let report = index

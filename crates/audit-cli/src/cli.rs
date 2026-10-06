@@ -67,7 +67,6 @@ pub enum AuditCommand {
 #[derive(Debug, Args)]
 pub struct StoreIndexArgs {
     /// Repository root to audit.
-    #[arg(default_value = ".")]
     pub repo_root: PathBuf,
 
     /// Check whether the committed catalog is up to date instead of writing it.
@@ -79,7 +78,6 @@ pub struct StoreIndexArgs {
 #[derive(Debug, Args)]
 pub struct AuditArgs {
     /// Repository root to audit.
-    #[arg(default_value = ".")]
     pub repo_root: PathBuf,
 
     /// Audit a specific persisted session id instead of a repo-wide audit.
@@ -118,7 +116,6 @@ pub struct LinksArgs {
 #[derive(Debug, Args)]
 pub struct HookArgs {
     /// Repository root to audit.
-    #[arg(default_value = ".")]
     pub repo_root: PathBuf,
 
     /// After a blocking audit result, try to repair the findings with
@@ -283,9 +280,8 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
         ));
     }
 
-    let index = RepositoryIndex::open(&args.repo_root)?;
-
     if let Some(journal_id) = args.resume.as_deref() {
+        let index = RepositoryIndex::open(&args.repo_root)?;
         let journal_id = journal_id.parse::<Uuid>().map_err(|error| {
             CliRunError::BadRequest(format!("invalid --resume journal UUID: {error}"))
         })?;
@@ -301,6 +297,7 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
     }
 
     if let Some(journal_id) = args.rollback.as_deref() {
+        let index = RepositoryIndex::open(&args.repo_root)?;
         let journal_id = journal_id.parse::<Uuid>().map_err(|error| {
             CliRunError::BadRequest(format!("invalid --rollback journal UUID: {error}"))
         })?;
@@ -324,10 +321,18 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
         )
     })?;
 
+    let selector = to_workspace_root.to_string_lossy();
+    let to_workspace_root = memory_kernel::workspace::normalize_explicit_workspace_selector(
+        Some(&selector),
+    )
+    .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
+
+    let index = RepositoryIndex::open(&args.repo_root)?;
+
     let audit_id = id
         .parse::<Uuid>()
         .map_err(|error| CliRunError::BadRequest(format!("invalid audit UUID: {error}")))?;
-    let report = index.plan_move_preflight(&audit_id, to_workspace_root)?;
+    let report = index.plan_move_preflight(&audit_id, &to_workspace_root)?;
 
     if args.dry_run || !report.supported() {
         return Ok(json!({
@@ -418,6 +423,11 @@ fn path_display(path: &std::path::Path) -> String {
 }
 
 fn run_audit(args: &AuditArgs) -> Result<AuditReport, CliRunError> {
+    let selector = args.repo_root.to_string_lossy();
+    let repo_root = memory_kernel::workspace::normalize_explicit_workspace_selector(
+        Some(&selector),
+    )
+    .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
     let mut config = AuditConfig::default();
     if let Some(max_file_lines) = args.max_file_lines {
         config.max_file_lines = max_file_lines;
@@ -429,7 +439,7 @@ fn run_audit(args: &AuditArgs) -> Result<AuditReport, CliRunError> {
         config.coverage_warn_below = coverage_warn_below;
     }
 
-    Ok(audit(&args.repo_root, config)?)
+    Ok(audit(&repo_root, config)?)
 }
 
 fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput, CliRunError> {
