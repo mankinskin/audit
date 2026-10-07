@@ -22,7 +22,7 @@ pub(super) fn collect_test_success(
     }
 
     let output = run_test_command(repo_root, &cargo_scope.package_names)?;
-    let summary = summarize_test_output(&output.stdout);
+    let summary = summarize_test_output(&output.stdout, &output.stderr);
     let findings = build_findings(&output, &summary);
 
     Ok(TestTrialResult {
@@ -73,27 +73,44 @@ fn run_test_command(repo_root: &Path, package_names: &[String]) -> Result<Output
         "--no-fail-fast".to_string(),
     ];
     append_package_args(&mut args, package_names);
-    args.extend([
-        "--".to_string(),
-        "--format=json".to_string(),
-        "-Z".to_string(),
-        "unstable-options".to_string(),
-    ]);
 
     run_command(repo_root, "cargo", args)
 }
 
-fn summarize_test_output(stdout: &[u8]) -> TestRunSummary {
+fn summarize_test_output(stdout: &[u8], stderr: &[u8]) -> TestRunSummary {
     let mut summary = TestRunSummary::default();
+    let mut saw_json = false;
 
     for line in String::from_utf8_lossy(stdout).lines() {
-        let Ok(event) = serde_json::from_str::<LibtestEvent>(line) else {
-            continue;
-        };
-        summary.record(event);
+        if let Ok(event) = serde_json::from_str::<LibtestEvent>(line) {
+            saw_json = true;
+            summary.record(event);
+        }
     }
 
+    if saw_json || summary.total() > 0 {
+        return summary;
+    }
+
+    parse_human_readable_output(&mut summary, stdout);
+    parse_human_readable_output(&mut summary, stderr);
     summary
+}
+
+fn parse_human_readable_output(summary: &mut TestRunSummary, stream: &[u8]) {
+    for line in String::from_utf8_lossy(stream).lines() {
+        let Some(rest) = line.trim().strip_prefix("test ") else {
+            continue;
+        };
+        if let Some(_name) = rest.strip_suffix(" ... ok") {
+            summary.passed += 1;
+        } else if let Some(name) = rest.strip_suffix(" ... FAILED") {
+            summary.failed += 1;
+            summary.failing_tests.push(name.to_string());
+        } else if let Some(_name) = rest.strip_suffix(" ... ignored") {
+            summary.ignored += 1;
+        }
+    }
 }
 
 fn build_findings(output: &Output, summary: &TestRunSummary) -> Vec<AuditFinding> {

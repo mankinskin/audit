@@ -25,10 +25,10 @@ fn assert_same_dir(resolved: &Path, expected: &Path) {
 #[test]
 fn finds_a_store_inside_the_selection() {
     let workspace = temp_dir("audit-store-scope-local");
-    let store = workspace.join(".ticket");
+    let store = workspace.join(".audit");
     fs::create_dir_all(&store).expect("create store");
 
-    let resolved = store_root_within(&workspace, ".ticket").expect("store in selection");
+    let resolved = store_root_within(&workspace, ".audit").expect("store in selection");
 
     assert_same_dir(&resolved, &store);
     let _ = fs::remove_dir_all(&workspace);
@@ -37,11 +37,11 @@ fn finds_a_store_inside_the_selection() {
 #[test]
 fn ignores_a_store_owned_by_a_parent_workspace() {
     let workspace = temp_dir("audit-store-scope-parent");
-    fs::create_dir_all(workspace.join(".ticket")).expect("create store");
+    fs::create_dir_all(workspace.join(".audit")).expect("create store");
     let nested = workspace.join("nested-repo");
     fs::create_dir_all(&nested).expect("create nested repo");
 
-    assert_eq!(store_root_within(&nested, ".ticket"), None);
+    assert_eq!(store_root_within(&nested, ".audit"), None);
     let _ = fs::remove_dir_all(&workspace);
 }
 
