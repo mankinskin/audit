@@ -16,22 +16,12 @@ use crate::{
     models::{AuditFinding, AuditMetrics, IndexedFile, SyncStats},
 };
 
-const INDEX_DIR: &str = ".audit";
+pub(crate) const INDEX_DIR: &str = ".audit";
 const INDEX_DB: &str = "audit.sqlite3";
 
 /// Location of an existing audit store at `repo_root`, never escaping it.
 pub fn resolve_index_dir(repo_root: &Path) -> PathBuf {
     memory_kernel::workspace::resolve_store_root_at_fixed_workspace(repo_root, INDEX_DIR)
-}
-
-/// Location a new audit store is created at: an existing store when one is
-/// already present, otherwise the canonical `.workflow-tools/audit` path.
-fn index_dir_for_init(repo_root: &Path) -> PathBuf {
-    let resolved = resolve_index_dir(repo_root);
-    if resolved.is_dir() {
-        return resolved;
-    }
-    memory_kernel::workspace::canonical_store_root(repo_root, INDEX_DIR)
 }
 
 pub struct RepositoryIndex {
@@ -49,7 +39,9 @@ impl RepositoryIndex {
             return Err(AuditError::MissingRepoRoot(format_output_path(repo_root)));
         }
 
-        let index_dir = resolve_index_dir(repo_root);
+        let index_dir =
+            Self::resolve_workspace_store(repo_root, memory_kernel::StoreAccessMode::ReadOnly)?
+                .store_root;
         let db_path = index_dir.join(INDEX_DB);
         if !db_path.is_file() {
             return Err(AuditError::WorkspaceNotFound {
@@ -75,7 +67,9 @@ impl RepositoryIndex {
             return Err(AuditError::MissingRepoRoot(format_output_path(repo_root)));
         }
 
-        let index_dir = index_dir_for_init(repo_root);
+        let index_dir =
+            Self::resolve_workspace_store(repo_root, memory_kernel::StoreAccessMode::CreateOrOpen)?
+                .store_root;
         fs::create_dir_all(&index_dir)?;
         ensure_index_gitignore(&index_dir, INDEX_DB)?;
         let db_path = index_dir.join(INDEX_DB);
@@ -394,14 +388,17 @@ mod tests {
     }
 
     #[test]
-    fn existing_legacy_store_keeps_its_location() {
+    fn existing_legacy_store_is_not_used_for_new_writes() {
         let temp = tempdir().unwrap();
         let repo = temp.path().join("repo");
         fs::create_dir_all(repo.join(".audit")).unwrap();
 
         let index = RepositoryIndex::init(&repo).unwrap();
 
-        assert_eq!(index.db_path().parent().unwrap(), repo.join(".audit"));
+        assert_eq!(
+            index.db_path().parent().unwrap(),
+            repo.join(".workflow-tools").join("audit")
+        );
     }
 
     #[test]

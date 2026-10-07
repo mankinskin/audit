@@ -89,6 +89,44 @@ fn audit_run_rejects_ambient_repository_aliases_before_store_init() {
 }
 
 #[test]
+fn audit_run_writes_to_the_selected_workspace_and_reads_back_from_its_canonical_store() {
+    let temp = tempdir().unwrap();
+    let selected = temp.path().join("selected");
+    let sibling = temp.path().join("sibling");
+    std::fs::create_dir_all(&selected).unwrap();
+    std::fs::create_dir_all(&sibling).unwrap();
+    std::fs::write(selected.join("README.md"), "# selected\n").unwrap();
+
+    let cli = parse_cli_from([
+        "audit",
+        "--json",
+        "run",
+        selected.to_string_lossy().as_ref(),
+    ])
+    .expect("parse run");
+
+    let report = match run(cli).expect("run audit") {
+        CliOutput::Machine(value, _) => value,
+        other => panic!("unexpected output: {other:?}"),
+    };
+    let run_id = report["run"]["run_id"].as_i64().expect("persisted run id");
+    let canonical_store = selected.join(".workflow-tools").join("audit");
+    let connection = rusqlite::Connection::open(canonical_store.join("audit.sqlite3"))
+        .expect("open selected canonical audit database");
+    let persisted_root: String = connection
+        .query_row(
+            "SELECT repo_root FROM audit_runs WHERE run_id = ?1",
+            [run_id],
+            |row| row.get(0),
+        )
+        .expect("read persisted audit run");
+
+    assert_eq!(persisted_root, report["repo_root"]);
+    assert!(!temp.path().join(".workflow-tools").join("audit").exists());
+    assert!(!sibling.join(".workflow-tools").join("audit").exists());
+}
+
+#[test]
 fn parses_move_command() {
     let cli = parse_cli_from([
         "audit",

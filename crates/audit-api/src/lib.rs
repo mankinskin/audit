@@ -1,5 +1,6 @@
 pub mod audit;
 pub mod config;
+pub mod domain_store;
 pub mod error;
 pub mod finding_entity;
 pub mod index;

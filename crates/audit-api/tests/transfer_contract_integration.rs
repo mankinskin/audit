@@ -83,7 +83,9 @@ fn audit_transfer_contract_temporary_root_parity() {
     fs::create_dir_all(&workflow_tools_audit).unwrap();
     run_git(&meta_workspace, &["init"]);
 
-    // Seed the source fixture into the temporary root.
+    // Seed the source fixture into the temporary root, then place it in the
+    // canonical Audit store because opening a fixture initializes its SQLite
+    // index and Audit writes are canonical-only.
     let fixture_source = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -94,6 +96,10 @@ fn audit_transfer_contract_temporary_root_parity() {
         .join("test-fixtures")
         .join("transfer-fixture");
     copy_dir_recursive(&fixture_source, &fixture_target);
+    let fixture_legacy_store = fixture_target.join(".audit");
+    let fixture_canonical_store = fixture_target.join(".workflow-tools").join("audit");
+    fs::create_dir_all(fixture_canonical_store.parent().unwrap()).unwrap();
+    fs::rename(&fixture_legacy_store, &fixture_canonical_store).unwrap();
 
     let source_index = RepositoryIndex::open_or_init(&fixture_target).unwrap();
     let entity_id: Uuid = FIXTURE_ENTITY_ID.parse().unwrap();
