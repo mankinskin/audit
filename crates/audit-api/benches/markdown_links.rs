@@ -52,7 +52,9 @@ fn create_synthetic_workspace(guidance_file_count: usize, background_file_count:
         content.push_str("Jump to [section](#section-heading).\n");
 
         for j in 0..10 {
-            content.push_str(&format!("Line {j} with text and [link](guide_{i}.instructions.md#anchor)\n"));
+            content.push_str(&format!(
+                "Line {j} with text and [link](guide_{i}.instructions.md#anchor)\n"
+            ));
         }
         fs::write(file_path, content).unwrap();
     }

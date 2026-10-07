@@ -1,12 +1,8 @@
 use clap::error::ErrorKind;
 
 use audit_cli::cli::{
-    CliOutput,
-    error_output,
-    parse_cli_from,
-    render_machine_output,
-    requested_machine_output_format_from_args,
-    run,
+    CliOutput, error_output, parse_cli_from, render_machine_output,
+    requested_machine_output_format_from_args, run,
 };
 
 fn main() {
@@ -30,18 +26,17 @@ fn main() {
                 )
             );
             std::process::exit(2);
-        },
+        }
     };
 
     match run(cli) {
-        Ok(CliOutput::Machine(value, format)) =>
-            match render_machine_output(&value, format) {
-                Ok(rendered) => println!("{rendered}"),
-                Err(err) => {
-                    eprintln!("{}", error_output(&err, Some(format)));
-                    std::process::exit(1);
-                },
-            },
+        Ok(CliOutput::Machine(value, format)) => match render_machine_output(&value, format) {
+            Ok(rendered) => println!("{rendered}"),
+            Err(err) => {
+                eprintln!("{}", error_output(&err, Some(format)));
+                std::process::exit(1);
+            }
+        },
         Ok(CliOutput::Text(text)) => println!("{text}"),
         Err(err) => {
             eprintln!(
@@ -52,6 +47,6 @@ fn main() {
                 )
             );
             std::process::exit(1);
-        },
+        }
     }
 }

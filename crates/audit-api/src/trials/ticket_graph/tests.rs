@@ -1,35 +1,19 @@
 use std::{
     collections::BTreeMap,
     fs,
-    path::{
-        Path,
-        PathBuf,
-    },
-    time::{
-        SystemTime,
-        UNIX_EPOCH,
-    },
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use chrono::Utc;
 use ticket_api::{
     model::edge::EdgeRecord,
-    storage::{
-        TicketStore,
-        indexed::IndexedTicket,
-    },
+    storage::{TicketStore, indexed::IndexedTicket},
 };
 use uuid::Uuid;
 
-use super::{
-    collect_policy_excluded_reference_findings,
-    evaluate,
-    load_workspace_policy_matchers,
-};
-use crate::models::{
-    Severity,
-    TrialStatus,
-};
+use super::{collect_policy_excluded_reference_findings, evaluate, load_workspace_policy_matchers};
+use crate::models::{Severity, TrialStatus};
 
 struct TestDir {
     path: PathBuf,
@@ -41,8 +25,7 @@ impl TestDir {
             .duration_since(UNIX_EPOCH)
             .expect("time went backwards")
             .as_nanos();
-        let path = std::env::temp_dir()
-            .join(format!("{prefix}-{}-{unique}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("{prefix}-{}-{unique}", std::process::id()));
         fs::create_dir_all(&path).expect("create temp dir");
         Self { path }
     }
@@ -193,10 +176,8 @@ fn reports_dependency_convergence_findings() {
 fn reports_policy_excluded_workspace_references() {
     let repo = TestDir::new("audit-ticket-graph-policy-excluded");
     let excluded_workspace = repo.path().join("excluded-workspace");
-    fs::create_dir_all(&excluded_workspace)
-        .expect("create excluded workspace root");
-    fs::write(excluded_workspace.join(".ticket-ignore"), "")
-        .expect("write marker");
+    fs::create_dir_all(&excluded_workspace).expect("create excluded workspace root");
+    fs::write(excluded_workspace.join(".ticket-ignore"), "").expect("write marker");
 
     let source = Uuid::new_v4();
     let fixture_target = Uuid::new_v4();

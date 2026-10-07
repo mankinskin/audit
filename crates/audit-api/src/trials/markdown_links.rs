@@ -146,7 +146,8 @@ impl<'a> GitRepoCache<'a> {
         for dir in searched {
             self.known_roots.insert(dir, resolved.clone());
         }
-        self.known_roots.insert(parent.to_path_buf(), resolved.clone());
+        self.known_roots
+            .insert(parent.to_path_buf(), resolved.clone());
 
         resolved
     }

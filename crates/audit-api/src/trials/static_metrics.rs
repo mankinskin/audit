@@ -1,29 +1,16 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use proc_macro2::Span;
 use serde_json::json;
 use syn::{
-    ImplItem,
-    Item,
+    ImplItem, Item,
     spanned::Spanned,
-    visit::{
-        self,
-        Visit,
-    },
+    visit::{self, Visit},
 };
 
 use crate::{
     error::AuditError,
-    models::{
-        AuditFinding,
-        IndexedFile,
-        Severity,
-        StaticMetricsSummary,
-        TrialStatus,
-    },
+    models::{AuditFinding, IndexedFile, Severity, StaticMetricsSummary, TrialStatus},
 };
 
 pub struct StaticMetricsResult {
@@ -47,15 +34,10 @@ pub fn evaluate(
             Err(_) => {
                 parse_failures += 1;
                 continue;
-            },
+            }
         };
 
-        collect_function_metrics(
-            &file.path,
-            &syntax.items,
-            None,
-            &mut function_metrics,
-        );
+        collect_function_metrics(&file.path, &syntax.items, None, &mut function_metrics);
     }
 
     let high_complexity_functions = function_metrics
@@ -148,8 +130,7 @@ fn collect_function_metrics(
     for item in items {
         match item {
             Item::Fn(item_fn) => {
-                let function_name =
-                    qualify_name(module_path, &item_fn.sig.ident.to_string());
+                let function_name = qualify_name(module_path, &item_fn.sig.ident.to_string());
                 output.push(FunctionMetric {
                     path: file_path.to_string(),
                     name: function_name,
@@ -157,14 +138,11 @@ fn collect_function_metrics(
                     end_line: end_line(item_fn.span()),
                     complexity: complexity_for_block(&item_fn.block),
                 });
-            },
-            Item::Impl(item_impl) =>
+            }
+            Item::Impl(item_impl) => {
                 for impl_item in &item_impl.items {
                     if let ImplItem::Fn(method) = impl_item {
-                        let method_name = qualify_name(
-                            module_path,
-                            &method.sig.ident.to_string(),
-                        );
+                        let method_name = qualify_name(module_path, &method.sig.ident.to_string());
                         output.push(FunctionMetric {
                             path: file_path.to_string(),
                             name: method_name,
@@ -173,11 +151,11 @@ fn collect_function_metrics(
                             complexity: complexity_for_block(&method.block),
                         });
                     }
-                },
+                }
+            }
             Item::Mod(item_mod) => {
                 if let Some((_, nested_items)) = &item_mod.content {
-                    let next_module_path =
-                        qualify_name(module_path, &item_mod.ident.to_string());
+                    let next_module_path = qualify_name(module_path, &item_mod.ident.to_string());
                     collect_function_metrics(
                         file_path,
                         nested_items,
@@ -185,19 +163,15 @@ fn collect_function_metrics(
                         output,
                     );
                 }
-            },
-            _ => {},
+            }
+            _ => {}
         }
     }
 }
 
-fn qualify_name(
-    module_path: Option<&str>,
-    name: &str,
-) -> String {
+fn qualify_name(module_path: Option<&str>, name: &str) -> String {
     match module_path {
-        Some(module_path) if !module_path.is_empty() =>
-            format!("{module_path}::{name}"),
+        Some(module_path) if !module_path.is_empty() => format!("{module_path}::{name}"),
         _ => name.to_string(),
     }
 }
@@ -221,50 +195,32 @@ struct ComplexityVisitor {
 }
 
 impl<'ast> Visit<'ast> for ComplexityVisitor {
-    fn visit_expr_if(
-        &mut self,
-        node: &'ast syn::ExprIf,
-    ) {
+    fn visit_expr_if(&mut self, node: &'ast syn::ExprIf) {
         self.complexity += 1;
         visit::visit_expr_if(self, node);
     }
 
-    fn visit_expr_for_loop(
-        &mut self,
-        node: &'ast syn::ExprForLoop,
-    ) {
+    fn visit_expr_for_loop(&mut self, node: &'ast syn::ExprForLoop) {
         self.complexity += 1;
         visit::visit_expr_for_loop(self, node);
     }
 
-    fn visit_expr_while(
-        &mut self,
-        node: &'ast syn::ExprWhile,
-    ) {
+    fn visit_expr_while(&mut self, node: &'ast syn::ExprWhile) {
         self.complexity += 1;
         visit::visit_expr_while(self, node);
     }
 
-    fn visit_expr_loop(
-        &mut self,
-        node: &'ast syn::ExprLoop,
-    ) {
+    fn visit_expr_loop(&mut self, node: &'ast syn::ExprLoop) {
         self.complexity += 1;
         visit::visit_expr_loop(self, node);
     }
 
-    fn visit_expr_match(
-        &mut self,
-        node: &'ast syn::ExprMatch,
-    ) {
+    fn visit_expr_match(&mut self, node: &'ast syn::ExprMatch) {
         self.complexity += node.arms.len();
         visit::visit_expr_match(self, node);
     }
 
-    fn visit_expr_binary(
-        &mut self,
-        node: &'ast syn::ExprBinary,
-    ) {
+    fn visit_expr_binary(&mut self, node: &'ast syn::ExprBinary) {
         if matches!(node.op, syn::BinOp::And(_) | syn::BinOp::Or(_)) {
             self.complexity += 1;
         }

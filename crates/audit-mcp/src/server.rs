@@ -1,53 +1,27 @@
-use std::{
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{path::PathBuf, sync::Arc};
 
 use audit_api::{
     audit,
     index::RepositoryIndex,
     models::AuditConfig,
-    summary::{
-        AuditSummaryBy,
-        summarize_report,
-    },
+    summary::{AuditSummaryBy, summarize_report},
 };
 use rmcp::{
-    ErrorData as McpError,
-    ServerHandler,
-    ServiceExt,
-    handler::server::{
-        tool::ToolRouter,
-        wrapper::Parameters,
-    },
-    model::{
-        CallToolResult,
-        Content,
-    },
-    schemars::{
-        self,
-        JsonSchema,
-    },
-    tool,
-    tool_handler,
-    tool_router,
+    ErrorData as McpError, ServerHandler, ServiceExt,
+    handler::server::{tool::ToolRouter, wrapper::Parameters},
+    model::{CallToolResult, Content},
+    schemars::{self, JsonSchema},
+    tool, tool_handler, tool_router,
     transport::stdio,
 };
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
 #[path = "server_move_json.rs"]
 mod server_move_json;
 
-use server_move_json::{
-    move_outcome_json,
-    move_plan_json,
-    path_display,
-};
+use server_move_json::{move_outcome_json, move_plan_json, path_display};
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AuditRepositoryInput {
@@ -75,8 +49,7 @@ pub enum AuditSummaryByInput {
 impl From<AuditSummaryByInput> for AuditSummaryBy {
     fn from(value: AuditSummaryByInput) -> Self {
         match value {
-            AuditSummaryByInput::Crate | AuditSummaryByInput::Package =>
-                AuditSummaryBy::Crate,
+            AuditSummaryByInput::Crate | AuditSummaryByInput::Package => AuditSummaryBy::Crate,
             AuditSummaryByInput::Category => AuditSummaryBy::Category,
             AuditSummaryByInput::Severity => AuditSummaryBy::Severity,
             AuditSummaryByInput::Metric => AuditSummaryBy::Metric,
@@ -129,10 +102,7 @@ impl AuditServer {
         }
     }
 
-    fn repo_root(
-        &self,
-        repo_root: Option<PathBuf>,
-    ) -> PathBuf {
+    fn repo_root(&self, repo_root: Option<PathBuf>) -> PathBuf {
         repo_root.unwrap_or_else(|| self.base_dir.clone())
     }
 
@@ -153,12 +123,9 @@ impl AuditServer {
             .map_err(|err| McpError::invalid_params(err.to_string(), None))
     }
 
-    fn json_result<T: Serialize>(
-        value: &T
-    ) -> Result<CallToolResult, McpError> {
-        let text = serde_json::to_string(value).map_err(|err| {
-            McpError::internal_error(format!("serialization: {err}"), None)
-        })?;
+    fn json_result<T: Serialize>(value: &T) -> Result<CallToolResult, McpError> {
+        let text = serde_json::to_string(value)
+            .map_err(|err| McpError::internal_error(format!("serialization: {err}"), None))?;
         Ok(CallToolResult::success(vec![Content::text(text)]))
     }
 
@@ -240,14 +207,10 @@ impl AuditServer {
         Parameters(input): Parameters<AuditMoveInput>,
     ) -> Result<CallToolResult, McpError> {
         let _guard = self.audit_lock.lock().await;
-        let target_workspace_root =
-            Self::normalize_target_workspace(&input.to_workspace_root)?;
+        let target_workspace_root = Self::normalize_target_workspace(&input.to_workspace_root)?;
         let repo_root = self.repo_root(input.repo_root);
         let audit_id = input.id.parse::<Uuid>().map_err(|error| {
-            McpError::invalid_params(
-                format!("invalid audit UUID: {error}"),
-                None,
-            )
+            McpError::invalid_params(format!("invalid audit UUID: {error}"), None)
         })?;
         let report = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?
@@ -274,14 +237,10 @@ impl AuditServer {
         Parameters(input): Parameters<AuditMoveInput>,
     ) -> Result<CallToolResult, McpError> {
         let _guard = self.audit_lock.lock().await;
-        let target_workspace_root =
-            Self::normalize_target_workspace(&input.to_workspace_root)?;
+        let target_workspace_root = Self::normalize_target_workspace(&input.to_workspace_root)?;
         let repo_root = Self::explicit_repo_root(input.repo_root)?;
         let audit_id = input.id.parse::<Uuid>().map_err(|error| {
-            McpError::invalid_params(
-                format!("invalid audit UUID: {error}"),
-                None,
-            )
+            McpError::invalid_params(format!("invalid audit UUID: {error}"), None)
         })?;
         let index = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?;
@@ -290,8 +249,7 @@ impl AuditServer {
             .map_err(|err| McpError::internal_error(err.to_string(), None))?;
         if !report.supported() {
             return Err(McpError::invalid_params(
-                "move preflight blocked; run audit_move_preflight for details"
-                    .to_string(),
+                "move preflight blocked; run audit_move_preflight for details".to_string(),
                 None,
             ));
         }
@@ -322,10 +280,7 @@ impl AuditServer {
         let _guard = self.audit_lock.lock().await;
         let repo_root = self.repo_root(input.repo_root);
         let journal = input.id.parse::<Uuid>().map_err(|error| {
-            McpError::invalid_params(
-                format!("invalid journal id: {error}"),
-                None,
-            )
+            McpError::invalid_params(format!("invalid journal id: {error}"), None)
         })?;
         let outcome = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?
@@ -354,10 +309,7 @@ impl AuditServer {
         let _guard = self.audit_lock.lock().await;
         let repo_root = self.repo_root(input.repo_root);
         let journal = input.id.parse::<Uuid>().map_err(|error| {
-            McpError::invalid_params(
-                format!("invalid journal id: {error}"),
-                None,
-            )
+            McpError::invalid_params(format!("invalid journal id: {error}"), None)
         })?;
         let outcome = RepositoryIndex::open(&repo_root)
             .map_err(|err| McpError::internal_error(err.to_string(), None))?
@@ -396,7 +348,7 @@ impl ServerHandler for AuditServer {
 }
 
 pub async fn run_mcp_server(
-    base_dir: PathBuf
+    base_dir: PathBuf,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let server = AuditServer::new(base_dir);
 

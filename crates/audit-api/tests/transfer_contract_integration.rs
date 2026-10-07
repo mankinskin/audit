@@ -9,26 +9,17 @@
 
 use std::{
     fs,
-    path::{
-        Path,
-        PathBuf,
-    },
+    path::{Path, PathBuf},
 };
 
 use audit_api::index::RepositoryIndex;
 use memory_kernel::ContentKind;
-use sha2::{
-    Digest,
-    Sha256,
-};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 const FIXTURE_ENTITY_ID: &str = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 
-fn run_git(
-    repo_root: &Path,
-    args: &[&str],
-) {
+fn run_git(repo_root: &Path, args: &[&str]) {
     let status = std::process::Command::new("git")
         .current_dir(repo_root)
         .args(args)
@@ -37,10 +28,7 @@ fn run_git(
     assert!(status.success(), "git {args:?} failed: {status}");
 }
 
-fn copy_dir_recursive(
-    from: &Path,
-    to: &Path,
-) {
+fn copy_dir_recursive(from: &Path, to: &Path) {
     fs::create_dir_all(to).unwrap();
     for entry in fs::read_dir(from).unwrap() {
         let entry = entry.unwrap();
@@ -102,7 +90,9 @@ fn audit_transfer_contract_temporary_root_parity() {
         .expect("audit crate root")
         .join("test-fixtures")
         .join("transfer-fixture");
-    let fixture_target = workflow_tools_audit.join("test-fixtures").join("transfer-fixture");
+    let fixture_target = workflow_tools_audit
+        .join("test-fixtures")
+        .join("transfer-fixture");
     copy_dir_recursive(&fixture_source, &fixture_target);
 
     let source_index = RepositoryIndex::open_or_init(&fixture_target).unwrap();
@@ -122,17 +112,27 @@ fn audit_transfer_contract_temporary_root_parity() {
     let plan = source_index
         .plan_move_preflight(&entity_id, &workflow_tools_audit)
         .unwrap();
-    assert!(plan.supported(), "expected a supported move plan: {:?}", plan.blockers);
+    assert!(
+        plan.supported(),
+        "expected a supported move plan: {:?}",
+        plan.blockers
+    );
     assert!(
         plan.destination_entity_path.ends_with(
-            Path::new(".workflow-tools").join("audit").join("findings").join(entity_id.to_string())
+            Path::new(".workflow-tools")
+                .join("audit")
+                .join("findings")
+                .join(entity_id.to_string())
         ),
         "destination must resolve under the canonical .workflow-tools/audit container: {:?}",
         plan.destination_entity_path
     );
 
     let outcome = source_index.execute_move_with_journal(&plan).unwrap();
-    assert!(!source_finding_file.exists(), "source finding folder must be moved away");
+    assert!(
+        !source_finding_file.exists(),
+        "source finding folder must be moved away"
+    );
     let destination_finding_file = plan.destination_entity_path.join("finding.json");
     assert!(destination_finding_file.is_file());
     assert_eq!(
@@ -180,14 +180,23 @@ fn audit_transfer_contract_temporary_root_parity() {
     );
     assert_eq!(
         tuples_from_root,
-        vec![(entity_id, PathBuf::from("findings").join(entity_id.to_string()).join("finding.json"), source_digest.clone())]
+        vec![(
+            entity_id,
+            PathBuf::from("findings")
+                .join(entity_id.to_string())
+                .join("finding.json"),
+            source_digest.clone()
+        )]
     );
 
     // Roll back and compare checksums before and after.
     let journal_id = outcome.journal.id;
     let rollback_outcome = source_index.rollback_move_with_journal(journal_id).unwrap();
     assert!(rollback_outcome.rolled_back);
-    assert!(source_finding_file.is_file(), "rollback must restore the source finding folder");
+    assert!(
+        source_finding_file.is_file(),
+        "rollback must restore the source finding folder"
+    );
     assert_eq!(
         digest_file(&source_finding_file),
         source_digest,

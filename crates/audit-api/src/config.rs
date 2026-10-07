@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use serde::Deserialize;
 
@@ -34,19 +31,15 @@ impl AuditFileConfig {
     }
 }
 
-pub fn is_repo_relative_path_excluded(
-    relative_path: &Path,
-    exclude_paths: &[String],
-) -> bool {
+pub fn is_repo_relative_path_excluded(relative_path: &Path, exclude_paths: &[String]) -> bool {
     let normalized = normalize_repo_relative_path(relative_path);
     if normalized.is_empty() {
         return false;
     }
 
-    exclude_paths.iter().any(|excluded| {
-        normalized == *excluded
-            || normalized.starts_with(&format!("{excluded}/"))
-    })
+    exclude_paths
+        .iter()
+        .any(|excluded| normalized == *excluded || normalized.starts_with(&format!("{excluded}/")))
 }
 
 pub fn normalize_repo_relative_path(path: &Path) -> String {

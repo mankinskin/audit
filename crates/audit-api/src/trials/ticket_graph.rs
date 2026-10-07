@@ -1,36 +1,22 @@
 use std::{
     fs,
-    path::{
-        Path,
-        PathBuf,
-    },
+    path::{Path, PathBuf},
 };
 
-use ignore::gitignore::{
-    Gitignore,
-    GitignoreBuilder,
-};
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use serde::Deserialize;
 use serde_json::json;
 use ticket_api::{
     error::StorageError,
     health,
     model::edge::EdgeRecord,
-    storage::{
-        TicketStore,
-        indexed::IndexedTicket,
-    },
+    storage::{TicketStore, indexed::IndexedTicket},
     workflow::WorkflowModel,
 };
 
 use crate::{
     config::format_output_path,
-    models::{
-        AuditFinding,
-        CountMetric,
-        Severity,
-        TrialStatus,
-    },
+    models::{AuditFinding, CountMetric, Severity, TrialStatus},
     trials::store_scope::store_root_within,
 };
 
@@ -77,8 +63,7 @@ pub fn evaluate(repo_root: &Path) -> TicketGraphResult {
         Err(result) => return result,
     };
 
-    let canonical_health =
-        health::collect_findings(&store, &tickets, &edges, &workflow);
+    let canonical_health = health::collect_findings(&store, &tickets, &edges, &workflow);
     let orphan_findings: Vec<AuditFinding> = canonical_health
         .findings
         .into_iter()
@@ -127,23 +112,20 @@ pub fn evaluate(repo_root: &Path) -> TicketGraphResult {
             })
         })
         .collect();
-    let convergence_findings =
-        collect_convergence_findings(repo_root, &workflow);
+    let convergence_findings = collect_convergence_findings(repo_root, &workflow);
 
     let policy_matchers = load_workspace_policy_matchers(repo_root);
-    let policy_excluded_reference_findings =
-        collect_policy_excluded_reference_findings(
-            repo_root,
-            &tickets,
-            &edges,
-            &policy_matchers,
-            Some(&store),
-        );
+    let policy_excluded_reference_findings = collect_policy_excluded_reference_findings(
+        repo_root,
+        &tickets,
+        &edges,
+        &policy_matchers,
+        Some(&store),
+    );
 
     let orphan_count = orphan_findings.len();
     let convergence_count = convergence_findings.len();
-    let policy_excluded_reference_count =
-        policy_excluded_reference_findings.len();
+    let policy_excluded_reference_count = policy_excluded_reference_findings.len();
     let findings = orphan_findings
         .into_iter()
         .chain(convergence_findings)
@@ -163,9 +145,7 @@ pub fn evaluate(repo_root: &Path) -> TicketGraphResult {
     }
 }
 
-fn open_ticket_store(
-    repo_root: &Path
-) -> Result<TicketStore, TicketGraphResult> {
+fn open_ticket_store(repo_root: &Path) -> Result<TicketStore, TicketGraphResult> {
     let Some(store_root) = store_root_within(repo_root, ".ticket") else {
         return Err(TicketGraphResult {
             metric: CountMetric::unavailable(format!(
@@ -178,14 +158,13 @@ fn open_ticket_store(
 
     match TicketStore::open(&store_root) {
         Ok(store) => Ok(store),
-        Err(StorageError::WorkspaceNotFound { path }) =>
-            Err(TicketGraphResult {
-                metric: CountMetric::unavailable(format!(
-                    "ticket store not initialized at {}; skipping ticket dependency topology audit",
-                    format_output_path(&path)
-                )),
-                findings: Vec::new(),
-            }),
+        Err(StorageError::WorkspaceNotFound { path }) => Err(TicketGraphResult {
+            metric: CountMetric::unavailable(format!(
+                "ticket store not initialized at {}; skipping ticket dependency topology audit",
+                format_output_path(&path)
+            )),
+            findings: Vec::new(),
+        }),
         Err(err) => Err(TicketGraphResult {
             metric: CountMetric {
                 status: TrialStatus::Failed,
@@ -200,22 +179,16 @@ fn open_ticket_store(
 }
 
 fn load_ticket_graph_inputs(
-    store: &TicketStore
-) -> Result<
-    (Vec<IndexedTicket>, Vec<EdgeRecord>, WorkflowModel),
-    TicketGraphResult,
-> {
+    store: &TicketStore,
+) -> Result<(Vec<IndexedTicket>, Vec<EdgeRecord>, WorkflowModel), TicketGraphResult> {
     let tickets = store.list(None, None, None).map_err(failed_result)?;
     let edges = store.list_all_edges().map_err(failed_result)?;
-    let workflow = WorkflowModel::build(store, tickets.clone(), edges.clone())
-        .map_err(failed_result)?;
+    let workflow =
+        WorkflowModel::build(store, tickets.clone(), edges.clone()).map_err(failed_result)?;
     Ok((tickets, edges, workflow))
 }
 
-fn collect_convergence_findings(
-    repo_root: &Path,
-    workflow: &WorkflowModel,
-) -> Vec<AuditFinding> {
+fn collect_convergence_findings(repo_root: &Path, workflow: &WorkflowModel) -> Vec<AuditFinding> {
     let mut findings = Vec::new();
     let mut sorted_ticket_ids = workflow
         .actionable_candidate_ids(None)
@@ -229,8 +202,7 @@ fn collect_convergence_findings(
         let Some(ticket) = workflow.ticket(&ticket_id) else {
             continue;
         };
-        let Some(issues) = workflow.dependency_state_inversions(&ticket_id)
-        else {
+        let Some(issues) = workflow.dependency_state_inversions(&ticket_id) else {
             continue;
         };
         let dependent_path = relative_ticket_path(repo_root, &ticket.path);
@@ -240,10 +212,9 @@ fn collect_convergence_findings(
             .unwrap_or_else(|| ticket.id.to_string());
 
         for issue in issues {
-            let prerequisite_path =
-                workflow.ticket(&issue.prerequisite_id).map(|prerequisite| {
-                    relative_ticket_path(repo_root, &prerequisite.path)
-                });
+            let prerequisite_path = workflow
+                .ticket(&issue.prerequisite_id)
+                .map(|prerequisite| relative_ticket_path(repo_root, &prerequisite.path));
             findings.push(AuditFinding {
                 id: format!(
                     "ticket_graph:convergence:{}:{}",
@@ -301,8 +272,7 @@ fn ticket_graph_details(
 ) -> String {
     if orphan_count == 0 {
         if convergence_count == 0 {
-            "all tickets participate in at least one depends_on relationship"
-                .to_string()
+            "all tickets participate in at least one depends_on relationship".to_string()
         } else {
             format!(
                 "all tickets participate in at least one depends_on relationship; {convergence_count} dependency convergence finding(s) detected; {policy_excluded_reference_count} policy-excluded workspace reference finding(s) detected"
@@ -402,19 +372,15 @@ fn collect_policy_excluded_reference_findings(
             continue;
         };
 
-        let Some(source_workspace_root) = ticket_workspace_root(&source.path)
-        else {
+        let Some(source_workspace_root) = ticket_workspace_root(&source.path) else {
             continue;
         };
-        let Some(target_workspace_root) = ticket_workspace_root(&target.path)
-        else {
+        let Some(target_workspace_root) = ticket_workspace_root(&target.path) else {
             continue;
         };
 
-        let source_exclusion_reason =
-            exclusion_reason(&source_workspace_root, policy_matchers);
-        let target_exclusion_reason =
-            exclusion_reason(&target_workspace_root, policy_matchers);
+        let source_exclusion_reason = exclusion_reason(&source_workspace_root, policy_matchers);
+        let target_exclusion_reason = exclusion_reason(&target_workspace_root, policy_matchers);
 
         let Some(target_reason) = target_exclusion_reason else {
             continue;
@@ -480,9 +446,7 @@ fn collect_policy_excluded_reference_findings(
 fn ticket_workspace_root(ticket_path: &Path) -> Option<PathBuf> {
     ticket_path
         .ancestors()
-        .find(|ancestor| {
-            ancestor.file_name().is_some_and(|name| name == ".ticket")
-        })
+        .find(|ancestor| ancestor.file_name().is_some_and(|name| name == ".ticket"))
         .and_then(Path::parent)
         .map(Path::to_path_buf)
 }
@@ -554,10 +518,7 @@ fn convergence_severity(state: Option<&str>) -> Severity {
     }
 }
 
-fn relative_ticket_path(
-    repo_root: &Path,
-    ticket_path: &Path,
-) -> String {
+fn relative_ticket_path(repo_root: &Path, ticket_path: &Path) -> String {
     ticket_path
         .strip_prefix(repo_root)
         .map(format_output_path)

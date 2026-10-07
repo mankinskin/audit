@@ -12,29 +12,15 @@
 
 use std::{
     collections::BTreeMap,
-    path::{
-        Path,
-        PathBuf,
-    },
+    path::{Path, PathBuf},
 };
 
 use memory_kernel::storage::move_kernel::{
-    self,
-    MoveDomain,
-    MoveError,
-    MoveOutcome,
-    MovePlan,
-    MoveReferences,
-    MoveResult,
-    MoveSetPlan,
+    self, MoveDomain, MoveError, MoveOutcome, MovePlan, MoveReferences, MoveResult, MoveSetPlan,
 };
 use uuid::Uuid;
 
-use crate::{
-    error::AuditError,
-    finding_entity::FINDING_ENTITY_SUBDIR,
-    index::RepositoryIndex,
-};
+use crate::{error::AuditError, finding_entity::FINDING_ENTITY_SUBDIR, index::RepositoryIndex};
 
 const AUDIT_INDEX_DIR: &str = ".audit";
 const AUDIT_ENTITY_DIR: &str = FINDING_ENTITY_SUBDIR;
@@ -87,10 +73,7 @@ impl MoveDomain for AuditMoveDomain<'_> {
             .unwrap_or_else(|| PathBuf::from(AUDIT_INDEX_DIR))
     }
 
-    fn source_entity_path(
-        &self,
-        entity_id: &Uuid,
-    ) -> MoveResult<Option<PathBuf>> {
+    fn source_entity_path(&self, entity_id: &Uuid) -> MoveResult<Option<PathBuf>> {
         Ok(self.index.finding_entity_path(entity_id))
     }
 
@@ -108,40 +91,26 @@ impl MoveDomain for AuditMoveDomain<'_> {
             .collect())
     }
 
-    fn related_entities(
-        &self,
-        _entity_id: &Uuid,
-    ) -> MoveResult<MoveReferences> {
+    fn related_entities(&self, _entity_id: &Uuid) -> MoveResult<MoveReferences> {
         Ok(MoveReferences::default())
     }
 
-    fn target_store_present(
-        &self,
-        target_store_root: &Path,
-    ) -> MoveResult<bool> {
+    fn target_store_present(&self, target_store_root: &Path) -> MoveResult<bool> {
         Ok(target_store_root.is_dir())
     }
 
-    fn entity_indexed_in(
-        &self,
-        store_root: &Path,
-        entity_id: &Uuid,
-    ) -> MoveResult<bool> {
+    fn entity_indexed_in(&self, store_root: &Path, entity_id: &Uuid) -> MoveResult<bool> {
         Ok(store_root
             .join(AUDIT_ENTITY_DIR)
             .join(entity_id.to_string())
             .is_dir())
     }
 
-    fn scan_store(
-        &self,
-        store_root: &Path,
-    ) -> MoveResult<()> {
-        let workspace_root =
-            memory_kernel::workspace::resolve_workspace_root_from_store_root(
-                store_root,
-                AUDIT_INDEX_DIR,
-            );
+    fn scan_store(&self, store_root: &Path) -> MoveResult<()> {
+        let workspace_root = memory_kernel::workspace::resolve_workspace_root_from_store_root(
+            store_root,
+            AUDIT_INDEX_DIR,
+        );
         RepositoryIndex::open(&workspace_root).map_err(to_move_error)?;
         Ok(())
     }
@@ -174,28 +143,19 @@ impl RepositoryIndex {
     }
 
     /// Execute a supported audit move with a fresh journal.
-    pub fn execute_move_with_journal(
-        &self,
-        plan: &MovePlan,
-    ) -> Result<MoveOutcome, AuditError> {
+    pub fn execute_move_with_journal(&self, plan: &MovePlan) -> Result<MoveOutcome, AuditError> {
         let domain = AuditMoveDomain::new(self);
         move_kernel::execute_move(&domain, plan).map_err(from_move_error)
     }
 
     /// Resume an interrupted audit move from its journal id.
-    pub fn resume_move_with_journal(
-        &self,
-        journal_id: Uuid,
-    ) -> Result<MoveOutcome, AuditError> {
+    pub fn resume_move_with_journal(&self, journal_id: Uuid) -> Result<MoveOutcome, AuditError> {
         let domain = AuditMoveDomain::new(self);
         move_kernel::resume_move(&domain, journal_id).map_err(from_move_error)
     }
 
     /// Roll back an audit move from its journal id.
-    pub fn rollback_move_with_journal(
-        &self,
-        journal_id: Uuid,
-    ) -> Result<MoveOutcome, AuditError> {
+    pub fn rollback_move_with_journal(&self, journal_id: Uuid) -> Result<MoveOutcome, AuditError> {
         let domain = AuditMoveDomain::new(self);
         move_kernel::rollback_move(&domain, journal_id).map_err(from_move_error)
     }
@@ -208,10 +168,7 @@ mod tests {
     use std::process::Command;
     use tempfile::tempdir;
 
-    fn run_git(
-        repo_root: &Path,
-        args: &[&str],
-    ) {
+    fn run_git(repo_root: &Path, args: &[&str]) {
         let status = Command::new("git")
             .current_dir(repo_root)
             .args(args)
@@ -230,8 +187,7 @@ mod tests {
         let source_workspace = repo.join("source");
         let target_workspace = repo.join("target");
         std::fs::create_dir_all(&source_workspace).unwrap();
-        std::fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR))
-            .unwrap();
+        std::fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR)).unwrap();
 
         let index = RepositoryIndex::init(&source_workspace).unwrap();
         let audit_entity_id = Uuid::new_v4();
@@ -239,10 +195,14 @@ mod tests {
             .plan_move_preflight(&audit_entity_id, &target_workspace)
             .unwrap();
 
-        assert!(plan.blockers.iter().any(|blocker| matches!(
-            blocker,
-            MoveBlocker::MissingSourceEntity { entity_id } if *entity_id == audit_entity_id
-        )), "expected missing source entity blocker: {:?}", plan.blockers);
+        assert!(
+            plan.blockers.iter().any(|blocker| matches!(
+                blocker,
+                MoveBlocker::MissingSourceEntity { entity_id } if *entity_id == audit_entity_id
+            )),
+            "expected missing source entity blocker: {:?}",
+            plan.blockers
+        );
     }
 
     fn digest_file(path: &Path) -> String {
@@ -291,14 +251,17 @@ mod tests {
 
         // An unrelated finding must be preserved untouched by the move.
         let unrelated_id = Uuid::new_v4();
-        let unrelated_dir =
-            persist_sample_finding(&source_index, unrelated_id);
+        let unrelated_dir = persist_sample_finding(&source_index, unrelated_id);
         let unrelated_digest = digest_file(&unrelated_dir.join("finding.json"));
 
         let plan = source_index
             .plan_move_preflight(&finding_id, &target_workspace)
             .unwrap();
-        assert!(plan.supported(), "expected supported plan: {:?}", plan.blockers);
+        assert!(
+            plan.supported(),
+            "expected supported plan: {:?}",
+            plan.blockers
+        );
 
         let outcome = source_index.execute_move_with_journal(&plan).unwrap();
         assert!(!source_dir.exists(), "source folder should be moved away");
@@ -314,7 +277,10 @@ mod tests {
 
         // Unrelated entity untouched.
         assert!(unrelated_dir.is_dir());
-        assert_eq!(digest_file(&unrelated_dir.join("finding.json")), unrelated_digest);
+        assert_eq!(
+            digest_file(&unrelated_dir.join("finding.json")),
+            unrelated_digest
+        );
 
         let rollback = source_index
             .rollback_move_with_journal(outcome.journal.id)
@@ -339,8 +305,7 @@ mod tests {
         let source_workspace = repo.join("source");
         let target_workspace = repo.join("target");
         std::fs::create_dir_all(&source_workspace).unwrap();
-        std::fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR))
-            .unwrap();
+        std::fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR)).unwrap();
 
         let index = RepositoryIndex::init(&source_workspace).unwrap();
         let store_root = index.db_path().parent().unwrap().to_path_buf();

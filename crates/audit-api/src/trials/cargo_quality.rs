@@ -1,34 +1,16 @@
 use std::{
     io::Cursor,
     path::Path,
-    process::{
-        Command,
-        Output,
-    },
+    process::{Command, Output},
 };
 
-use cargo_metadata::{
-    Message,
-    MetadataCommand,
-    diagnostic::DiagnosticLevel,
-};
+use cargo_metadata::{Message, MetadataCommand, diagnostic::DiagnosticLevel};
 use serde_json::json;
 
 use crate::{
-    config::{
-        is_repo_relative_path_excluded,
-        normalize_output_text,
-        normalize_repo_relative_path,
-    },
+    config::{is_repo_relative_path_excluded, normalize_output_text, normalize_repo_relative_path},
     error::AuditError,
-    models::{
-        AuditFinding,
-        CountMetric,
-        CoverageSummary,
-        Severity,
-        TestSummary,
-        TrialStatus,
-    },
+    models::{AuditFinding, CountMetric, CoverageSummary, Severity, TestSummary, TrialStatus},
 };
 
 mod coverage;
@@ -59,9 +41,7 @@ pub fn collect_compiler_warnings(
             metric: CountMetric {
                 status: TrialStatus::NotApplicable,
                 count: None,
-                details: Some(
-                    "No Cargo.toml found at the repository root.".to_string(),
-                ),
+                details: Some("No Cargo.toml found at the repository root.".to_string()),
             },
             findings: Vec::new(),
         });
@@ -72,10 +52,7 @@ pub fn collect_compiler_warnings(
             metric: CountMetric {
                 status: TrialStatus::NotApplicable,
                 count: None,
-                details: Some(
-                    "All workspace Cargo packages are excluded by config."
-                        .to_string(),
-                ),
+                details: Some("All workspace Cargo packages are excluded by config.".to_string()),
             },
             findings: Vec::new(),
         });
@@ -103,11 +80,7 @@ pub fn collect_compiler_warnings(
                     .iter()
                     .find(|span| span.is_primary);
                 if primary_span.is_some_and(|span| {
-                    is_file_name_excluded(
-                        repo_root,
-                        &span.file_name,
-                        exclude_paths,
-                    )
+                    is_file_name_excluded(repo_root, &span.file_name, exclude_paths)
                 }) {
                     continue;
                 }
@@ -206,11 +179,7 @@ pub fn collect_coverage(
     coverage::collect_coverage(repo_root, exclude_paths, warn_below)
 }
 
-fn run_command(
-    repo_root: &Path,
-    program: &str,
-    args: Vec<String>,
-) -> Result<Output, AuditError> {
+fn run_command(repo_root: &Path, program: &str, args: Vec<String>) -> Result<Output, AuditError> {
     let output = Command::new(program)
         .args(args)
         .current_dir(repo_root)
@@ -222,10 +191,7 @@ fn has_cargo_manifest(repo_root: &Path) -> bool {
     repo_root.join("Cargo.toml").exists()
 }
 
-fn cargo_scope(
-    repo_root: &Path,
-    exclude_paths: &[String],
-) -> Result<CargoScope, AuditError> {
+fn cargo_scope(repo_root: &Path, exclude_paths: &[String]) -> Result<CargoScope, AuditError> {
     if !has_cargo_manifest(repo_root) {
         return Ok(CargoScope {
             has_manifest: false,
@@ -246,12 +212,9 @@ fn cargo_scope(
         .workspace_packages()
         .iter()
         .filter_map(|package| {
-            let manifest_path =
-                package.manifest_path.as_std_path().canonicalize().ok()?;
-            let relative_manifest =
-                manifest_path.strip_prefix(repo_root).ok()?;
-            if is_repo_relative_path_excluded(relative_manifest, exclude_paths)
-            {
+            let manifest_path = package.manifest_path.as_std_path().canonicalize().ok()?;
+            let relative_manifest = manifest_path.strip_prefix(repo_root).ok()?;
+            if is_repo_relative_path_excluded(relative_manifest, exclude_paths) {
                 return None;
             }
             Some(package.name.to_string())
@@ -264,21 +227,14 @@ fn cargo_scope(
     })
 }
 
-fn append_package_args(
-    args: &mut Vec<String>,
-    package_names: &[String],
-) {
+fn append_package_args(args: &mut Vec<String>, package_names: &[String]) {
     for package_name in package_names {
         args.push("-p".to_string());
         args.push(package_name.clone());
     }
 }
 
-fn is_file_name_excluded(
-    repo_root: &Path,
-    file_name: &str,
-    exclude_paths: &[String],
-) -> bool {
+fn is_file_name_excluded(repo_root: &Path, file_name: &str, exclude_paths: &[String]) -> bool {
     let file_path = Path::new(file_name);
     let relative = file_path
         .strip_prefix(repo_root)
@@ -292,9 +248,9 @@ fn is_file_name_excluded(
             }
         });
 
-    relative.as_deref().is_some_and(|relative| {
-        is_repo_relative_path_excluded(Path::new(relative), exclude_paths)
-    })
+    relative
+        .as_deref()
+        .is_some_and(|relative| is_repo_relative_path_excluded(Path::new(relative), exclude_paths))
 }
 
 struct CargoScope {

@@ -1,16 +1,10 @@
 use assert_cmd::Command;
+use audit_cli::cli::{CliOutput, parse_cli_from, run};
 use rusqlite::Connection;
-use audit_cli::cli::{
-    CliOutput,
-    parse_cli_from,
-    run,
-};
 use tempfile::tempdir;
 
 use super::fixtures::{
-    assert_unix_formatted_output_text,
-    assert_unix_formatted_output_value,
-    write_sample_repo,
+    assert_unix_formatted_output_text, assert_unix_formatted_output_value, write_sample_repo,
 };
 
 #[test]
@@ -31,10 +25,7 @@ fn cli_supports_json_and_text_output() {
     .expect("parse cli");
 
     match run(cli).expect("run cli") {
-        CliOutput::Machine(
-            value,
-            audit_cli::cli::MachineOutputFormat::Json,
-        ) => {
+        CliOutput::Machine(value, audit_cli::cli::MachineOutputFormat::Json) => {
             assert_eq!(value["service"], "audit-mcp");
             assert!(
                 value["findings"]
@@ -46,18 +37,16 @@ fn cli_supports_json_and_text_output() {
             let compiler_warning = value["findings"]
                 .as_array()
                 .and_then(|findings| {
-                    findings.iter().find(|finding| {
-                        finding["category"] == "compiler_warning"
-                    })
+                    findings
+                        .iter()
+                        .find(|finding| finding["category"] == "compiler_warning")
                 })
                 .expect("compiler warning finding");
-            assert_unix_formatted_output_value(
-                &compiler_warning["evidence"]["sample"][0]["path"],
-            );
-        },
+            assert_unix_formatted_output_value(&compiler_warning["evidence"]["sample"][0]["path"]);
+        }
         CliOutput::Machine(_, format) => {
             panic!("expected json machine output, got {format:?}");
-        },
+        }
         CliOutput::Text(_) => panic!("expected json output"),
     }
 
@@ -168,10 +157,9 @@ fn cli_supports_toon_output() {
         String::from_utf8_lossy(&out.stderr),
     );
 
-    let rendered =
-        String::from_utf8(out.stdout).expect("toon output should be utf-8");
-    let parsed: serde_json::Value = toon_format::decode_default(&rendered)
-        .expect("toon output should decode");
+    let rendered = String::from_utf8(out.stdout).expect("toon output should be utf-8");
+    let parsed: serde_json::Value =
+        toon_format::decode_default(&rendered).expect("toon output should decode");
 
     assert_eq!(parsed["service"], "audit-mcp");
     assert!(

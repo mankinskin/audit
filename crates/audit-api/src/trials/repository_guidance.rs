@@ -120,14 +120,18 @@ mod tests {
         assert_eq!(result.metric.present_files, 1);
         assert_eq!(result.metric.missing_files, 1);
         assert_eq!(result.metric.empty_files, 1);
-        assert!(result
-            .findings
-            .iter()
-            .any(|finding| { finding.id == "repository_guidance:empty:INSTALL.md" }));
-        assert!(result
-            .findings
-            .iter()
-            .any(|finding| { finding.id == "repository_guidance:missing:CONTRIBUTING.md" }));
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|finding| { finding.id == "repository_guidance:empty:INSTALL.md" })
+        );
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|finding| { finding.id == "repository_guidance:missing:CONTRIBUTING.md" })
+        );
     }
 
     #[test]

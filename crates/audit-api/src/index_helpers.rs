@@ -1,15 +1,8 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
-use crate::{
-    config::is_repo_relative_path_excluded,
-    error::AuditError,
-};
+use crate::{config::is_repo_relative_path_excluded, error::AuditError};
 
-const GITIGNORE_HEADER: &str =
-    "# Excluded local audit index artifacts created by audit-api.";
+const GITIGNORE_HEADER: &str = "# Excluded local audit index artifacts created by audit-api.";
 
 /// Ignoring the ignore file itself keeps a store that holds only the local
 /// sqlite index invisible to `git status`.
@@ -22,8 +15,7 @@ pub(crate) fn ensure_index_gitignore(
     let gitignore_path = index_dir.join(".gitignore");
     let existing = match fs::read_to_string(&gitignore_path) {
         Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound =>
-            String::new(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(error) => return Err(error.into()),
     };
 
@@ -67,21 +59,12 @@ pub(crate) fn ensure_index_gitignore(
     Ok(())
 }
 
-pub(crate) fn is_excluded_path(
-    relative_path: &Path,
-    exclude_paths: &[String],
-) -> bool {
+pub(crate) fn is_excluded_path(relative_path: &Path, exclude_paths: &[String]) -> bool {
     if relative_path.components().any(|component| {
         let value = component.as_os_str().to_string_lossy();
         matches!(
             value.as_ref(),
-            ".git"
-                | "target"
-                | "node_modules"
-                | ".audit"
-                | ".workflow-tools"
-                | ".idea"
-                | ".vscode"
+            ".git" | "target" | "node_modules" | ".audit" | ".workflow-tools" | ".idea" | ".vscode"
         )
     }) {
         return true;

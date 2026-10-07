@@ -11,8 +11,5 @@ pub mod summary;
 pub mod trials;
 
 pub use store_index::{
-    AUDIT_INDEX_AGENT_HOOK_PATH,
-    AuditCatalogArtifacts,
-    AuditCatalogSource,
-    generate_audit_catalog,
+    AUDIT_INDEX_AGENT_HOOK_PATH, AuditCatalogArtifacts, AuditCatalogSource, generate_audit_catalog,
 };

@@ -1,13 +1,7 @@
 use std::fs;
 
-use audit_api::{
-    audit::audit,
-    models::AuditConfig,
-};
-use rusqlite::{
-    Connection,
-    params,
-};
+use audit_api::{audit::audit, models::AuditConfig};
+use rusqlite::{Connection, params};
 use tempfile::tempdir;
 
 #[test]
@@ -51,12 +45,13 @@ edition = "2021"
     )
     .expect("audit succeeds");
 
-    assert!(!report.findings.iter().any(|finding| {
-        finding.path.as_deref() == Some("crates/deps/third_party/src/lib.rs")
-    }));
+    assert!(
+        !report.findings.iter().any(|finding| {
+            finding.path.as_deref() == Some("crates/deps/third_party/src/lib.rs")
+        })
+    );
 
-    let connection =
-        Connection::open(&report.index_database).expect("open audit db");
+    let connection = Connection::open(&report.index_database).expect("open audit db");
     let indexed_count: i64 = connection
         .query_row(
             "SELECT COUNT(*) FROM files WHERE path = ?1",

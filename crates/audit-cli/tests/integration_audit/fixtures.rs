@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 pub(super) fn write_sample_repo(repo_root: &Path) {
     fs::create_dir_all(repo_root.join("src")).expect("create src dir");

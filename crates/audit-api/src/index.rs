@@ -1,39 +1,19 @@
 use std::{
     fs,
-    path::{
-        Path,
-        PathBuf,
-    },
+    path::{Path, PathBuf},
     time::UNIX_EPOCH,
 };
 
 use chrono::Utc;
 use ignore::WalkBuilder;
-use rusqlite::{
-    Connection,
-    OptionalExtension,
-    params,
-};
-use sha2::{
-    Digest,
-    Sha256,
-};
+use rusqlite::{Connection, OptionalExtension, params};
+use sha2::{Digest, Sha256};
 
 use crate::{
     config::format_output_path,
     error::AuditError,
-    index_helpers::{
-        count_lines,
-        detect_language,
-        ensure_index_gitignore,
-        is_excluded_path,
-    },
-    models::{
-        AuditFinding,
-        AuditMetrics,
-        IndexedFile,
-        SyncStats,
-    },
+    index_helpers::{count_lines, detect_language, ensure_index_gitignore, is_excluded_path},
+    models::{AuditFinding, AuditMetrics, IndexedFile, SyncStats},
 };
 
 const INDEX_DIR: &str = ".audit";
@@ -41,9 +21,7 @@ const INDEX_DB: &str = "audit.sqlite3";
 
 /// Location of an existing audit store at `repo_root`, never escaping it.
 pub fn resolve_index_dir(repo_root: &Path) -> PathBuf {
-    memory_kernel::workspace::resolve_store_root_at_fixed_workspace(
-        repo_root, INDEX_DIR,
-    )
+    memory_kernel::workspace::resolve_store_root_at_fixed_workspace(repo_root, INDEX_DIR)
 }
 
 /// Location a new audit store is created at: an existing store when one is
@@ -68,9 +46,7 @@ impl RepositoryIndex {
     /// [`RepositoryIndex::open_or_init`] to create a new one.
     pub fn open(repo_root: &Path) -> Result<Self, AuditError> {
         if !repo_root.exists() {
-            return Err(AuditError::MissingRepoRoot(format_output_path(
-                repo_root,
-            )));
+            return Err(AuditError::MissingRepoRoot(format_output_path(repo_root)));
         }
 
         let index_dir = resolve_index_dir(repo_root);
@@ -96,9 +72,7 @@ impl RepositoryIndex {
     /// without error.
     pub fn init(repo_root: &Path) -> Result<Self, AuditError> {
         if !repo_root.exists() {
-            return Err(AuditError::MissingRepoRoot(format_output_path(
-                repo_root,
-            )));
+            return Err(AuditError::MissingRepoRoot(format_output_path(repo_root)));
         }
 
         let index_dir = index_dir_for_init(repo_root);
@@ -118,21 +92,15 @@ impl RepositoryIndex {
     /// Open an existing repository index, or initialize a new one when it
     /// does not exist yet.
     pub fn open_or_init(repo_root: &Path) -> Result<Self, AuditError> {
-        memory_kernel::storage::open_or_init(
-            || Self::open(repo_root),
-            || Self::init(repo_root),
-        )
-        .map(memory_kernel::storage::Opened::into_inner)
+        memory_kernel::storage::open_or_init(|| Self::open(repo_root), || Self::init(repo_root))
+            .map(memory_kernel::storage::Opened::into_inner)
     }
 
     pub fn db_path(&self) -> &Path {
         &self.db_path
     }
 
-    pub fn sync_source_files(
-        &self,
-        exclude_paths: &[String],
-    ) -> Result<SyncStats, AuditError> {
+    pub fn sync_source_files(&self, exclude_paths: &[String]) -> Result<SyncStats, AuditError> {
         let mut conn = self.connect()?;
         let tx = conn.transaction()?;
         let scan_token = Utc::now().format("%Y%m%d%H%M%S%3f").to_string();
@@ -146,8 +114,7 @@ impl RepositoryIndex {
         let repo_root = self.repo_root.clone();
         let exclude_paths = exclude_paths.to_vec();
         walker.filter_entry(move |entry| {
-            let Ok(relative_path) = entry.path().strip_prefix(&repo_root)
-            else {
+            let Ok(relative_path) = entry.path().strip_prefix(&repo_root) else {
                 return true;
             };
             !is_excluded_path(relative_path, &exclude_paths)
@@ -194,12 +161,12 @@ impl RepositoryIndex {
                 )
                 .optional()?;
 
-            if existing.as_ref().is_some_and(
-                |(existing_modified, existing_size)| {
-                    *existing_modified == modified_unix_ms
-                        && *existing_size == size_bytes
-                },
-            ) {
+            if existing
+                .as_ref()
+                .is_some_and(|(existing_modified, existing_size)| {
+                    *existing_modified == modified_unix_ms && *existing_size == size_bytes
+                })
+            {
                 tx.execute(
                     "UPDATE files SET last_scan_token = ?1 WHERE path = ?2",
                     params![scan_token, relative_path],
@@ -364,10 +331,7 @@ impl RepositoryIndex {
         Ok(conn)
     }
 
-    fn init_schema(
-        &self,
-        conn: &Connection,
-    ) -> Result<(), AuditError> {
+    fn init_schema(&self, conn: &Connection) -> Result<(), AuditError> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS files (
                 path TEXT PRIMARY KEY,
@@ -448,13 +412,14 @@ mod tests {
 
         let index = RepositoryIndex::init(&repo).unwrap();
 
-        let gitignore = fs::read_to_string(
-            index.db_path().parent().unwrap().join(".gitignore"),
-        )
-        .unwrap();
-        for entry in
-            [INDEX_DB, "audit.sqlite3-shm", "audit.sqlite3-wal", "/.gitignore"]
-        {
+        let gitignore =
+            fs::read_to_string(index.db_path().parent().unwrap().join(".gitignore")).unwrap();
+        for entry in [
+            INDEX_DB,
+            "audit.sqlite3-shm",
+            "audit.sqlite3-wal",
+            "/.gitignore",
+        ] {
             assert!(
                 gitignore.lines().any(|line| line.trim() == entry),
                 "missing {entry} in {gitignore}"

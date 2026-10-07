@@ -2,20 +2,11 @@ use std::path::Path;
 
 use memory_kernel::error::StorageError;
 use serde_json::json;
-use spec_api::{
-    SpecManifest,
-    SpecStore,
-    error::SpecError,
-};
+use spec_api::{SpecManifest, SpecStore, error::SpecError};
 
 use crate::{
     config::format_output_path,
-    models::{
-        AuditFinding,
-        Severity,
-        SpecFulfillmentSummary,
-        TrialStatus,
-    },
+    models::{AuditFinding, Severity, SpecFulfillmentSummary, TrialStatus},
     trials::store_scope::store_root_within,
 };
 
@@ -53,7 +44,7 @@ pub fn evaluate(repo_root: &Path) -> SpecFulfillmentResult {
                 )),
                 findings: Vec::new(),
             };
-        },
+        }
     };
 
     let mut counts = SpecFulfillmentCounts::default();
@@ -71,9 +62,7 @@ pub fn evaluate(repo_root: &Path) -> SpecFulfillmentResult {
     }
 
     let metric = if counts.structured_specs == 0 {
-        SpecFulfillmentSummary::not_applicable(
-            "no structured expectation-oriented specs found",
-        )
+        SpecFulfillmentSummary::not_applicable("no structured expectation-oriented specs found")
     } else {
         SpecFulfillmentSummary {
             status: TrialStatus::Collected,
@@ -88,9 +77,7 @@ pub fn evaluate(repo_root: &Path) -> SpecFulfillmentResult {
     SpecFulfillmentResult { metric, findings }
 }
 
-fn prepare_spec_store(
-    repo_root: &Path
-) -> Result<spec_api::SpecStore, SpecFulfillmentResult> {
+fn prepare_spec_store(repo_root: &Path) -> Result<spec_api::SpecStore, SpecFulfillmentResult> {
     let Some(store_root) = store_root_within(repo_root, ".spec") else {
         return Err(SpecFulfillmentResult {
             metric: SpecFulfillmentSummary::unavailable(format!(
@@ -111,7 +98,7 @@ fn prepare_spec_store(
                 )),
                 findings: Vec::new(),
             });
-        },
+        }
         Err(err) => {
             return Err(SpecFulfillmentResult {
                 metric: SpecFulfillmentSummary::failed(format!(
@@ -119,14 +106,12 @@ fn prepare_spec_store(
                 )),
                 findings: Vec::new(),
             });
-        },
+        }
     };
 
     if let Err(err) = store.scan(false) {
         return Err(SpecFulfillmentResult {
-            metric: SpecFulfillmentSummary::failed(format!(
-                "failed to scan spec store: {err}"
-            )),
+            metric: SpecFulfillmentSummary::failed(format!("failed to scan spec store: {err}")),
             findings: Vec::new(),
         });
     }
@@ -270,8 +255,7 @@ fn finding_instructions(issue: &str) -> Vec<String> {
         ];
     }
 
-    if let Some(evidence_requirement_id) =
-        issue_suffix(issue, "unsatisfied evidence requirement '")
+    if let Some(evidence_requirement_id) = issue_suffix(issue, "unsatisfied evidence requirement '")
     {
         return vec![
             format!(
@@ -291,10 +275,7 @@ fn finding_instructions(issue: &str) -> Vec<String> {
     ]
 }
 
-fn issue_suffix(
-    issue: &str,
-    prefix: &str,
-) -> Option<String> {
+fn issue_suffix(issue: &str, prefix: &str) -> Option<String> {
     issue
         .strip_prefix(prefix)
         .and_then(|suffix| suffix.strip_suffix('\''))
@@ -304,15 +285,8 @@ fn issue_suffix(
 #[cfg(test)]
 mod tests {
     use spec_api::{
-        AcceptanceCriterion,
-        EvidenceRequirement,
-        ExpectedProperty,
-        FulfillmentStatus,
-        FulfillmentSubjectKind,
-        FulfillmentSummary,
-        SpecContractMode,
-        SpecManifest,
-        SpecStore,
+        AcceptanceCriterion, EvidenceRequirement, ExpectedProperty, FulfillmentStatus,
+        FulfillmentSubjectKind, FulfillmentSummary, SpecContractMode, SpecManifest, SpecStore,
     };
     use tempfile::tempdir;
 
@@ -365,9 +339,12 @@ mod tests {
                 .summary
                 .contains("blocked by unsatisfied evidence requirement")
         }));
-        assert!(result.findings.iter().any(|finding| {
-            finding.summary.contains("missing authoritative evidence")
-        }));
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|finding| { finding.summary.contains("missing authoritative evidence") })
+        );
     }
 
     fn make_structured_spec(
@@ -383,8 +360,7 @@ mod tests {
         }]);
         manifest.set_acceptance_criteria(vec![AcceptanceCriterion {
             id: "criterion-visible".to_string(),
-            statement: "Audit status is derived from structured store data."
-                .to_string(),
+            statement: "Audit status is derived from structured store data.".to_string(),
             expected_property_ids: vec!["prop-visible".to_string()],
             required_evidence_ids: vec!["evidence-doc".to_string()],
         }]);

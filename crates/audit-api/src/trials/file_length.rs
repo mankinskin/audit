@@ -1,21 +1,13 @@
 use serde_json::json;
 
-use crate::models::{
-    AuditFinding,
-    FileLengthMetric,
-    IndexedFile,
-    Severity,
-};
+use crate::models::{AuditFinding, FileLengthMetric, IndexedFile, Severity};
 
 pub struct FileLengthResult {
     pub metric: FileLengthMetric,
     pub findings: Vec<AuditFinding>,
 }
 
-pub fn evaluate(
-    files: &[IndexedFile],
-    threshold: usize,
-) -> FileLengthResult {
+pub fn evaluate(files: &[IndexedFile], threshold: usize) -> FileLengthResult {
     let mut findings = Vec::new();
     let total_lines = files.iter().map(|file| file.line_count).sum::<usize>();
     let max_lines = files
@@ -69,10 +61,7 @@ pub fn evaluate(
     }
 }
 
-fn average(
-    total: usize,
-    count: usize,
-) -> f64 {
+fn average(total: usize, count: usize) -> f64 {
     if count == 0 {
         0.0
     } else {

@@ -1,28 +1,15 @@
-use std::{
-    path::Path,
-    process::Output,
-};
+use std::{path::Path, process::Output};
 
 use serde::Deserialize;
 use serde_json::json;
 
 use crate::{
     error::AuditError,
-    models::{
-        AuditFinding,
-        Severity,
-        TestSummary,
-        TrialStatus,
-    },
+    models::{AuditFinding, Severity, TestSummary, TrialStatus},
 };
 
 use super::{
-    CargoScope,
-    TestTrialResult,
-    append_package_args,
-    cargo_scope,
-    run_command,
-    trim_output,
+    CargoScope, TestTrialResult, append_package_args, cargo_scope, run_command, trim_output,
 };
 
 pub(super) fn collect_test_success(
@@ -54,9 +41,7 @@ fn not_applicable_result(cargo_scope: &CargoScope) -> Option<TestTrialResult> {
                 failed: None,
                 ignored: None,
                 success_rate: None,
-                details: Some(
-                    "No Cargo.toml found at the repository root.".to_string(),
-                ),
+                details: Some("No Cargo.toml found at the repository root.".to_string()),
             },
             findings: Vec::new(),
         });
@@ -71,10 +56,7 @@ fn not_applicable_result(cargo_scope: &CargoScope) -> Option<TestTrialResult> {
                 failed: None,
                 ignored: None,
                 success_rate: None,
-                details: Some(
-                    "All workspace Cargo packages are excluded by config."
-                        .to_string(),
-                ),
+                details: Some("All workspace Cargo packages are excluded by config.".to_string()),
             },
             findings: Vec::new(),
         });
@@ -83,10 +65,7 @@ fn not_applicable_result(cargo_scope: &CargoScope) -> Option<TestTrialResult> {
     None
 }
 
-fn run_test_command(
-    repo_root: &Path,
-    package_names: &[String],
-) -> Result<Output, AuditError> {
+fn run_test_command(repo_root: &Path, package_names: &[String]) -> Result<Output, AuditError> {
     let mut args = vec![
         "test".to_string(),
         "--lib".to_string(),
@@ -117,10 +96,7 @@ fn summarize_test_output(stdout: &[u8]) -> TestRunSummary {
     summary
 }
 
-fn build_findings(
-    output: &Output,
-    summary: &TestRunSummary,
-) -> Vec<AuditFinding> {
+fn build_findings(output: &Output, summary: &TestRunSummary) -> Vec<AuditFinding> {
     let mut findings = Vec::new();
 
     if summary.failed > 0 {
@@ -134,10 +110,7 @@ fn build_findings(
     findings
 }
 
-fn build_metric(
-    output: &Output,
-    summary: &TestRunSummary,
-) -> TestSummary {
+fn build_metric(output: &Output, summary: &TestRunSummary) -> TestSummary {
     let total = summary.total();
 
     TestSummary {
@@ -224,17 +197,11 @@ impl TestRunSummary {
         if self.passed + self.failed == 0 {
             None
         } else {
-            Some(
-                (self.passed as f64 / (self.passed + self.failed) as f64)
-                    * 100.0,
-            )
+            Some((self.passed as f64 / (self.passed + self.failed) as f64) * 100.0)
         }
     }
 
-    fn record(
-        &mut self,
-        event: LibtestEvent,
-    ) {
+    fn record(&mut self, event: LibtestEvent) {
         if event.kind != "test" {
             return;
         }
@@ -246,9 +213,9 @@ impl TestRunSummary {
                 if let Some(name) = event.name {
                     self.failing_tests.push(name);
                 }
-            },
+            }
             Some("ignored") => self.ignored += 1,
-            _ => {},
+            _ => {}
         }
     }
 }

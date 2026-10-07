@@ -1,20 +1,9 @@
 use std::path::Path;
 
-use serde_json::{
-    Value,
-    json,
-};
-use session_api::{
-    SessionWorkflowGraph,
-    validate_workflow_graph,
-};
+use serde_json::{Value, json};
+use session_api::{SessionWorkflowGraph, validate_workflow_graph};
 
-use crate::models::{
-    AuditFinding,
-    CountMetric,
-    Severity,
-    TrialStatus,
-};
+use crate::models::{AuditFinding, CountMetric, Severity, TrialStatus};
 
 pub struct SessionWorkflowGraphResult {
     pub metric: CountMetric,
@@ -37,10 +26,7 @@ pub fn evaluate(repo_root: &Path) -> SessionWorkflowGraphResult {
         let relative_path = relative_path(repo_root, &source_path);
         for issue in validate_workflow_graph(&graph) {
             findings.push(AuditFinding {
-                id: format!(
-                    "session_workflow_graph:{}:{}",
-                    relative_path, issue.code
-                ),
+                id: format!("session_workflow_graph:{}:{}", relative_path, issue.code),
                 category: "session_workflow_graph".to_string(),
                 severity: Severity::Medium,
                 summary: issue.message.clone(),
@@ -68,8 +54,7 @@ pub fn evaluate(repo_root: &Path) -> SessionWorkflowGraphResult {
             status: TrialStatus::Collected,
             count: Some(issue_count),
             details: Some(if issue_count == 0 {
-                "all scanned session workflow graphs are structurally valid"
-                    .to_string()
+                "all scanned session workflow graphs are structurally valid".to_string()
             } else {
                 format!(
                     "{issue_count} structural issue(s) found across scanned session workflow graphs"
@@ -85,7 +70,7 @@ pub fn evaluate(repo_root: &Path) -> SessionWorkflowGraphResult {
 /// workflow graphs and skipping files that are missing, unparseable, or
 /// have no nodes.
 fn scan_session_workflow_graphs(
-    sessions_root: &Path
+    sessions_root: &Path,
 ) -> Vec<(std::path::PathBuf, SessionWorkflowGraph)> {
     let mut results = Vec::new();
     let Ok(session_dirs) = std::fs::read_dir(sessions_root) else {
@@ -99,9 +84,7 @@ fn scan_session_workflow_graphs(
         }
 
         let context_path = session_path.join("context.json");
-        if let Some(graph) =
-            extract_graph(&context_path, |value| value.get("workflow").cloned())
-        {
+        if let Some(graph) = extract_graph(&context_path, |value| value.get("workflow").cloned()) {
             results.push((context_path, graph));
         }
 
@@ -129,18 +112,14 @@ fn extract_graph(
     let raw = std::fs::read_to_string(path).ok()?;
     let value: Value = serde_json::from_str(&raw).ok()?;
     let graph_value = extract(&value)?;
-    let graph: SessionWorkflowGraph =
-        serde_json::from_value(graph_value).ok()?;
+    let graph: SessionWorkflowGraph = serde_json::from_value(graph_value).ok()?;
     if graph.nodes.is_empty() {
         return None;
     }
     Some(graph)
 }
 
-fn relative_path(
-    repo_root: &Path,
-    path: &Path,
-) -> String {
+fn relative_path(repo_root: &Path, path: &Path) -> String {
     path.strip_prefix(repo_root)
         .unwrap_or(path)
         .to_string_lossy()

@@ -6,21 +6,15 @@ use serde_json::Value;
 use tempfile::TempDir;
 
 use super::{
-    AuditRepositoryInput,
-    AuditSummaryByInput,
+    AuditMoveInput, AuditMoveJournalInput, AuditRepositoryInput, AuditServer, AuditSummaryByInput,
     AuditSummaryInput,
-    AuditMoveInput,
-    AuditMoveJournalInput,
-    AuditServer,
 };
 
 #[tokio::test]
 async fn audit_exposes_repository_guidance_findings() {
     let tmp = TempDir::new().expect("tempdir");
-    std::fs::write(tmp.path().join("README.md"), "# Repo\n")
-        .expect("write readme");
-    std::fs::write(tmp.path().join("INSTALL.md"), " \n")
-        .expect("write install");
+    std::fs::write(tmp.path().join("README.md"), "# Repo\n").expect("write readme");
+    std::fs::write(tmp.path().join("INSTALL.md"), " \n").expect("write install");
 
     let server = AuditServer::new(tmp.path().to_path_buf());
     let result = server
@@ -34,18 +28,23 @@ async fn audit_exposes_repository_guidance_findings() {
         .expect("audit");
     let json = extract_json(result);
 
-    assert!(json["findings"].as_array().unwrap().iter().any(|finding| {
-        finding["id"] == "repository_guidance:empty:INSTALL.md"
-    }));
-    assert!(json["findings"].as_array().unwrap().iter().any(|finding| {
-        finding["id"] == "repository_guidance:missing:CONTRIBUTING.md"
-    }));
+    assert!(
+        json["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| { finding["id"] == "repository_guidance:empty:INSTALL.md" })
+    );
+    assert!(
+        json["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|finding| { finding["id"] == "repository_guidance:missing:CONTRIBUTING.md" })
+    );
 }
 
-fn run_git(
-    repo_root: &std::path::Path,
-    args: &[&str],
-) {
+fn run_git(repo_root: &std::path::Path, args: &[&str]) {
     let status = Command::new("git")
         .current_dir(repo_root)
         .args(args)
@@ -74,7 +73,13 @@ async fn audit_write_tools_reject_omitted_and_ambient_workspace_selectors() {
     let tmp = TempDir::new().expect("tempdir");
     let server = AuditServer::new(tmp.path().to_path_buf());
 
-    for selector in [None, Some(PathBuf::from("")), Some(PathBuf::from("  ")), Some(PathBuf::from("default")), Some(PathBuf::from(".."))] {
+    for selector in [
+        None,
+        Some(PathBuf::from("")),
+        Some(PathBuf::from("  ")),
+        Some(PathBuf::from("default")),
+        Some(PathBuf::from("..")),
+    ] {
         let audit = server
             .audit(Parameters(AuditRepositoryInput {
                 repo_root: selector.clone(),
@@ -192,12 +197,9 @@ async fn move_preflight_is_blocked_for_repository_level_audit_storage() {
 
     let source_workspace = repo_root.join("source-workspace");
     let target_workspace = repo_root.join("target-workspace");
-    std::fs::create_dir_all(source_workspace.join(".audit"))
-        .expect("source audit dir");
-    std::fs::create_dir_all(target_workspace.join(".audit"))
-        .expect("target audit dir");
-    audit_api::index::RepositoryIndex::init(&source_workspace)
-        .expect("init source audit index");
+    std::fs::create_dir_all(source_workspace.join(".audit")).expect("source audit dir");
+    std::fs::create_dir_all(target_workspace.join(".audit")).expect("target audit dir");
+    audit_api::index::RepositoryIndex::init(&source_workspace).expect("init source audit index");
 
     let server = AuditServer::new(source_workspace.clone());
     let result = server
@@ -243,14 +245,8 @@ async fn move_targets_reject_ambient_workspace_aliases_before_store_access() {
     }
 }
 
-fn persist_sample_finding(
-    index: &audit_api::index::RepositoryIndex,
-    id: uuid::Uuid,
-) {
-    use audit_api::{
-        finding_entity::PersistedFinding,
-        models::Severity,
-    };
+fn persist_sample_finding(index: &audit_api::index::RepositoryIndex, id: uuid::Uuid) {
+    use audit_api::{finding_entity::PersistedFinding, models::Severity};
     let finding = PersistedFinding {
         id,
         category: "file-length".to_string(),
@@ -264,7 +260,9 @@ fn persist_sample_finding(
         instructions: vec!["split the file".to_string()],
         evidence: serde_json::json!({"lines": 500}),
     };
-    index.persist_finding_entity(&finding).expect("persist finding");
+    index
+        .persist_finding_entity(&finding)
+        .expect("persist finding");
 }
 
 #[tokio::test]
@@ -278,8 +276,7 @@ async fn move_apply_and_rollback_round_trip_entity_folder_finding() {
     let target_workspace = repo_root.join("target-workspace");
     std::fs::create_dir_all(&source_workspace).expect("source workspace");
     std::fs::create_dir_all(&target_workspace).expect("target workspace");
-    audit_api::index::RepositoryIndex::init(&target_workspace)
-        .expect("init target audit index");
+    audit_api::index::RepositoryIndex::init(&target_workspace).expect("init target audit index");
     let source_index = audit_api::index::RepositoryIndex::init(&source_workspace)
         .expect("init source audit index");
 

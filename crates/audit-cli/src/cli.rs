@@ -322,10 +322,9 @@ fn cmd_move(args: MoveArgs) -> Result<Value, CliRunError> {
     })?;
 
     let selector = to_workspace_root.to_string_lossy();
-    let to_workspace_root = memory_kernel::workspace::normalize_explicit_workspace_selector(
-        Some(&selector),
-    )
-    .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
+    let to_workspace_root =
+        memory_kernel::workspace::normalize_explicit_workspace_selector(Some(&selector))
+            .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
 
     let index = RepositoryIndex::open(&args.repo_root)?;
 
@@ -424,10 +423,9 @@ fn path_display(path: &std::path::Path) -> String {
 
 fn run_audit(args: &AuditArgs) -> Result<AuditReport, CliRunError> {
     let selector = args.repo_root.to_string_lossy();
-    let repo_root = memory_kernel::workspace::normalize_explicit_workspace_selector(
-        Some(&selector),
-    )
-    .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
+    let repo_root =
+        memory_kernel::workspace::normalize_explicit_workspace_selector(Some(&selector))
+            .map_err(|error| CliRunError::BadRequest(error.to_string()))?;
     let mut config = AuditConfig::default();
     if let Some(max_file_lines) = args.max_file_lines {
         config.max_file_lines = max_file_lines;
@@ -476,9 +474,9 @@ fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput
             println!("{text}");
         }
 
-        return Err(CliRunError::BrokenLinks(blocking_link_details_from_findings(
-            &result.findings,
-        )));
+        return Err(CliRunError::BrokenLinks(
+            blocking_link_details_from_findings(&result.findings),
+        ));
     }
 
     Ok(output)
@@ -509,8 +507,9 @@ fn run_hook(args: &HookArgs, as_json: bool, as_toon: bool) -> Result<CliOutput, 
 
     if report.metrics.markdown_links.blocking_findings > 0 && args.autofix {
         let autofix_hint = guidance_autofix_command(&repo_root);
-        let autofix_result = run_guidance_autofix(&repo_root)
-            .map_err(|error| CliRunError::BadRequest(format!("autofix failed: {error}\ntry: {autofix_hint}")))?;
+        let autofix_result = run_guidance_autofix(&repo_root).map_err(|error| {
+            CliRunError::BadRequest(format!("autofix failed: {error}\ntry: {autofix_hint}"))
+        })?;
         if !autofix_result.is_empty() {
             println!("{autofix_result}");
         }
@@ -577,7 +576,11 @@ fn run_guidance_autofix(repo_root: &Path) -> Result<String, String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    let combined = [stdout, stderr].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
+    let combined = [stdout, stderr]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n");
 
     if output.status.success() {
         Ok(combined)

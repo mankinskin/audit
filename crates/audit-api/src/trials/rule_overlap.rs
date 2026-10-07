@@ -1,17 +1,9 @@
-use std::{
-    collections::HashSet,
-    path::Path,
-};
+use std::{collections::HashSet, path::Path};
 
 use serde_json::json;
 
 use crate::{
-    models::{
-        AuditFinding,
-        RuleOverlapSummary,
-        Severity,
-        TrialStatus,
-    },
+    models::{AuditFinding, RuleOverlapSummary, Severity, TrialStatus},
     trials::store_scope::store_root_within,
 };
 
@@ -48,7 +40,7 @@ pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
                 )),
                 findings: Vec::new(),
             };
-        },
+        }
         Err(error) => {
             return RuleOverlapResult {
                 metric: RuleOverlapSummary::unavailable(format!(
@@ -56,14 +48,12 @@ pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
                 )),
                 findings: Vec::new(),
             };
-        },
+        }
     };
 
     if let Err(error) = store.scan(false) {
         return RuleOverlapResult {
-            metric: RuleOverlapSummary::unavailable(format!(
-                "failed to scan rule store: {error}"
-            )),
+            metric: RuleOverlapSummary::unavailable(format!("failed to scan rule store: {error}")),
             findings: Vec::new(),
         };
     }
@@ -72,12 +62,10 @@ pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
         Ok(items) => items,
         Err(error) => {
             return RuleOverlapResult {
-                metric: RuleOverlapSummary::unavailable(format!(
-                    "failed to list rules: {error}"
-                )),
+                metric: RuleOverlapSummary::unavailable(format!("failed to list rules: {error}")),
                 findings: Vec::new(),
             };
-        },
+        }
     };
 
     let fingerprints = rules
@@ -105,9 +93,7 @@ pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
             let right = &fingerprints[j];
             let similarity = jaccard_similarity(&left.tokens, &right.tokens);
             max_similarity =
-                Some(max_similarity.map_or(similarity, |current: f64| {
-                    current.max(similarity)
-                }));
+                Some(max_similarity.map_or(similarity, |current: f64| current.max(similarity)));
 
             if similarity >= HIGH_OVERLAP_THRESHOLD {
                 overlaps.push((left, right, similarity));
@@ -115,9 +101,7 @@ pub fn evaluate(repo_root: &Path) -> RuleOverlapResult {
         }
     }
 
-    overlaps.sort_by(|a, b| {
-        b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)
-    });
+    overlaps.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
 
     let findings = overlaps
         .iter()
@@ -200,10 +184,7 @@ fn tokenize(text: &str) -> HashSet<String> {
         .collect()
 }
 
-fn jaccard_similarity(
-    left: &HashSet<String>,
-    right: &HashSet<String>,
-) -> f64 {
+fn jaccard_similarity(left: &HashSet<String>, right: &HashSet<String>) -> f64 {
     if left.is_empty() && right.is_empty() {
         return 1.0;
     }

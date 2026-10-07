@@ -57,8 +57,7 @@ fn run_command_fails_when_guidance_links_are_blocking() {
     )
     .unwrap();
 
-    let cli = parse_cli_from(["audit", "run", temp.path().to_str().unwrap()])
-        .expect("parse run");
+    let cli = parse_cli_from(["audit", "run", temp.path().to_str().unwrap()]).expect("parse run");
 
     let error = run(cli).expect_err("full audit must fail on blocking guidance links");
     let message = error.to_string();

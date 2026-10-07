@@ -2,22 +2,12 @@ use assert_cmd::Command;
 use audit_api::{
     audit::audit,
     models::AuditConfig,
-    summary::{
-        AuditSummaryBy,
-        summarize_report,
-    },
+    summary::{AuditSummaryBy, summarize_report},
 };
-use audit_cli::cli::{
-    CliOutput,
-    parse_cli_from,
-    run,
-};
+use audit_cli::cli::{CliOutput, parse_cli_from, run};
 use tempfile::tempdir;
 
-use super::fixtures::{
-    assert_unix_formatted_output_text,
-    write_workspace_repo,
-};
+use super::fixtures::{assert_unix_formatted_output_text, write_workspace_repo};
 
 #[test]
 fn summary_groups_findings_by_crate_and_supports_cli_output() {
@@ -34,8 +24,7 @@ fn summary_groups_findings_by_crate_and_supports_cli_output() {
     )
     .expect("audit succeeds");
 
-    let summary = summarize_report(&report, AuditSummaryBy::Crate)
-        .expect("summarize report");
+    let summary = summarize_report(&report, AuditSummaryBy::Crate).expect("summarize report");
     assert_eq!(summary.by, AuditSummaryBy::Crate);
     assert_eq!(summary.total_findings, report.findings.len());
     assert!(summary.repo_wide_issues >= 1);
@@ -73,27 +62,22 @@ fn summary_groups_findings_by_crate_and_supports_cli_output() {
     .expect("parse summary cli");
 
     match run(cli).expect("run summary cli") {
-        CliOutput::Machine(
-            value,
-            audit_cli::cli::MachineOutputFormat::Json,
-        ) => {
+        CliOutput::Machine(value, audit_cli::cli::MachineOutputFormat::Json) => {
             assert_eq!(value["by"], "crate");
             assert_eq!(value["total_findings"], report.findings.len());
             assert!(value["groups"].as_array().is_some_and(|groups| {
                 groups.iter().any(|group| group["key"] == "workspace-root")
-                    && groups
-                        .iter()
-                        .any(|group| group["key"] == "nested-member")
+                    && groups.iter().any(|group| group["key"] == "nested-member")
             }));
             assert!(value["unmapped_paths"].as_array().is_some_and(|groups| {
                 groups
                     .iter()
                     .any(|group| group["key"] == "scripts/helper.py")
             }));
-        },
+        }
         CliOutput::Machine(_, format) => {
             panic!("expected json machine output, got {format:?}");
-        },
+        }
         CliOutput::Text(_) => panic!("expected json output"),
     }
 
@@ -117,7 +101,7 @@ fn summary_groups_findings_by_crate_and_supports_cli_output() {
             assert!(output.contains("Grouped by: crate"));
             assert!(output.contains("workspace-root"));
             assert!(output.contains("nested-member"));
-        },
+        }
         CliOutput::Machine(_, _) => panic!("expected text output"),
     }
 

@@ -9,24 +9,15 @@
 //! artifacts such as `README.md` and `index.toon` are never represented this
 //! way and therefore remain unsupported for entity moves.
 
-use std::{
-    fs,
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
-use serde::{
-    Deserialize,
-    Serialize,
-};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::AuditError,
     index::RepositoryIndex,
-    models::{
-        AuditFinding,
-        Severity,
-    },
+    models::{AuditFinding, Severity},
 };
 
 pub const FINDING_ENTITY_SUBDIR: &str = "findings";
@@ -51,10 +42,7 @@ pub struct PersistedFinding {
 impl PersistedFinding {
     /// Build a persisted finding from a scan-produced [`AuditFinding`],
     /// assigning it the given stable entity id.
-    pub fn from_finding(
-        id: Uuid,
-        finding: &AuditFinding,
-    ) -> Self {
+    pub fn from_finding(id: Uuid, finding: &AuditFinding) -> Self {
         Self {
             id,
             category: finding.category.clone(),
@@ -81,10 +69,7 @@ impl RepositoryIndex {
     }
 
     /// On-disk folder for `id`, if it exists.
-    pub fn finding_entity_path(
-        &self,
-        id: &Uuid,
-    ) -> Option<PathBuf> {
+    pub fn finding_entity_path(&self, id: &Uuid) -> Option<PathBuf> {
         let path = self.finding_entities_root().join(id.to_string());
         path.is_dir().then_some(path)
     }
@@ -103,10 +88,7 @@ impl RepositoryIndex {
     }
 
     /// Load a persisted finding entity, if present.
-    pub fn load_finding_entity(
-        &self,
-        id: &Uuid,
-    ) -> Result<Option<PersistedFinding>, AuditError> {
+    pub fn load_finding_entity(&self, id: &Uuid) -> Result<Option<PersistedFinding>, AuditError> {
         let Some(dir) = self.finding_entity_path(id) else {
             return Ok(None);
         };
