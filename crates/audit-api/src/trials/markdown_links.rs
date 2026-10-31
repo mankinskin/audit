@@ -335,9 +335,10 @@ impl RepoSet {
         let mut current = 0usize;
         let mut remainder = relative_slash(&self.root, target);
         loop {
-            let hit = self.gitlinks(current).into_iter().find(|(path, _)| {
-                remainder == *path || remainder.starts_with(&format!("{path}/"))
-            });
+            let hit = self
+                .gitlinks(current)
+                .into_iter()
+                .find(|(path, _)| remainder == *path || remainder.starts_with(&format!("{path}/")));
             let Some((path, commit)) = hit else {
                 return (current, remainder);
             };
@@ -896,7 +897,10 @@ fn collect_sources(
     repos: &mut RepoSet,
 ) -> Vec<SourceFile> {
     let mut walker = WalkBuilder::new(repo_root);
-    walker.standard_filters(true).hidden(false).follow_links(false);
+    walker
+        .standard_filters(true)
+        .hidden(false)
+        .follow_links(false);
     let filter_root = repo_root.to_path_buf();
     let exclude_paths = options.exclude_paths.clone();
     let include_historical = options.include_historical;
@@ -1077,14 +1081,15 @@ mod tests {
     }
 
     fn categories(result: &MarkdownLinkResult) -> Vec<&str> {
-        result.findings.iter().map(|f| f.category.as_str()).collect()
+        result
+            .findings
+            .iter()
+            .map(|f| f.category.as_str())
+            .collect()
     }
 
     /// Root repo with `README.md` and a committed submodule `sub`.
-    fn root_with_sub(
-        root_readme: &str,
-        sub_files: &[(&str, &str)],
-    ) -> (TempDir, TempDir) {
+    fn root_with_sub(root_readme: &str, sub_files: &[(&str, &str)]) -> (TempDir, TempDir) {
         let sub_src = init_repo(sub_files);
         let root = init_repo(&[("README.md", root_readme)]);
         add_submodule(root.path(), sub_src.path(), "sub");
@@ -1228,10 +1233,7 @@ mod tests {
     // 2
     #[test]
     fn submodule_target_only_in_working_tree_is_missing_at_revision() {
-        let (root, _sub) = root_with_sub(
-            "[x](sub/docs/new.md)\n",
-            &[("README.md", "# sub\n")],
-        );
+        let (root, _sub) = root_with_sub("[x](sub/docs/new.md)\n", &[("README.md", "# sub\n")]);
         write(&root.path().join("sub"), "docs/new.md", "# uncommitted\n");
         let result = evaluate(root.path(), &[]);
         assert_eq!(
@@ -1245,10 +1247,7 @@ mod tests {
     // 3
     #[test]
     fn submodule_upward_link_is_blocking_cross_repository() {
-        let (root, _sub) = root_with_sub(
-            "# root\n",
-            &[("docs/y.md", "[up](../../README.md)\n")],
-        );
+        let (root, _sub) = root_with_sub("# root\n", &[("docs/y.md", "[up](../../README.md)\n")]);
         let result = evaluate(root.path(), &[]);
         assert_eq!(
             categories(&result),
@@ -1319,7 +1318,10 @@ mod tests {
         let repo = tempdir().unwrap();
         write(repo.path(), "README.md", "![i](missing.png)\n");
         let result = evaluate(repo.path(), &[]);
-        assert_eq!(categories(&result), vec![LinkClass::MissingTarget.category()]);
+        assert_eq!(
+            categories(&result),
+            vec![LinkClass::MissingTarget.category()]
+        );
     }
 
     // 8
@@ -1367,20 +1369,20 @@ mod tests {
     fn findings_carry_blocking_guidance_and_repository_evidence() {
         let (root, _sub) = root_with_sub(
             "[nope](nope.md)\n",
-            &[(".agents/s.md", "[m](missing.md)\n"), ("up.md", "[u](../README.md)\n")],
+            &[
+                (".agents/s.md", "[m](missing.md)\n"),
+                ("up.md", "[u](../README.md)\n"),
+            ],
         );
         let result = evaluate(root.path(), &[]);
         assert_eq!(result.findings.len(), 3, "{:?}", categories(&result));
         for finding in &result.findings {
             let ev = &finding.evidence;
-            let class_blocking = [
-                LinkClass::MissingTarget,
-                LinkClass::CrossRepository,
-            ]
-            .iter()
-            .find(|c| c.category() == finding.category)
-            .map(|c| c.is_blocking())
-            .unwrap();
+            let class_blocking = [LinkClass::MissingTarget, LinkClass::CrossRepository]
+                .iter()
+                .find(|c| c.category() == finding.category)
+                .map(|c| c.is_blocking())
+                .unwrap();
             assert_eq!(ev["blocking"], class_blocking);
             match finding.path.as_deref().unwrap() {
                 "README.md" => {
@@ -1432,10 +1434,11 @@ mod tests {
             vec![LinkClass::SubmoduleGitlinkMissing.category()]
         );
         assert!(
-            result
-                .findings
-                .iter()
-                .all(|f| !f.path.as_deref().unwrap_or("").starts_with("mid/inner"))
+            result.findings.iter().all(|f| !f
+                .path
+                .as_deref()
+                .unwrap_or("")
+                .starts_with("mid/inner"))
         );
     }
 }
