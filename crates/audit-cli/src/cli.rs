@@ -618,8 +618,11 @@ fn blocking_link_details_from_findings(findings: &[audit_api::models::AuditFindi
         .iter()
         .filter(|finding| {
             finding.metric_name == "markdown_link_coherence"
-                && finding.category
-                    != audit_api::trials::markdown_links::LinkClass::CrossRepository.category()
+                && finding
+                    .evidence
+                    .get("blocking")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true)
         })
         .map(|finding| {
             format!(
