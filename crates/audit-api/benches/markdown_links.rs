@@ -1,9 +1,10 @@
 //! Criterion benchmark for [`audit_api::trials::markdown_links::evaluate`].
 
-use std::fs;
-
 use audit_api::trials::markdown_links::evaluate;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::fs;
+use std::path::Path;
+use std::process::Command;
 use tempfile::TempDir;
 
 /// Creates a synthetic repository structure containing guidance files and background code files.
@@ -97,8 +98,90 @@ fn create_synthetic_workspace(guidance_file_count: usize, background_file_count:
     temp
 }
 
+/// Runs `git` in `dir`, panicking on failure (bench fixture setup only).
+fn git(dir: &Path, args: &[&str]) {
+    let output = Command::new("git")
+        .current_dir(dir)
+        .args([
+            "-c",
+            "user.name=Bench",
+            "-c",
+            "user.email=bench@example.com",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "protocol.file.allow=always",
+        ])
+        .args(args)
+        .output()
+        .expect("git runs");
+    assert!(
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// Root repository with a committed submodule `sub`; root documents link into
+/// the submodule (with anchors), so evaluation reads blobs at the gitlink.
+fn create_submodule_workspace(doc_count: usize) -> (TempDir, TempDir) {
+    let sub_src = TempDir::new().expect("create submodule source");
+    git(sub_src.path(), &["init", "-q", "-b", "main"]);
+    fs::create_dir_all(sub_src.path().join("docs")).unwrap();
+    for i in 0..doc_count {
+        fs::write(
+            sub_src.path().join(format!("docs/d{i}.md")),
+            format!("# Doc {i}\n\n## Section\n\nSee [self](#section).\n"),
+        )
+        .unwrap();
+    }
+    git(sub_src.path(), &["add", "-A"]);
+    git(sub_src.path(), &["commit", "-q", "-m", "init"]);
+
+    let root = TempDir::new().expect("create root");
+    git(root.path(), &["init", "-q", "-b", "main"]);
+    let mut readme = String::from("# Root\n\n");
+    for i in 0..doc_count {
+        readme.push_str(&format!(
+            "[d{i}](sub/docs/d{i}.md#section) [h{i}](sub/docs/d{i}.md#doc-{i})\n"
+        ));
+    }
+    fs::write(root.path().join("README.md"), readme).unwrap();
+    git(root.path(), &["add", "-A"]);
+    git(root.path(), &["commit", "-q", "-m", "init"]);
+    git(
+        root.path(),
+        &[
+            "submodule",
+            "add",
+            "-q",
+            sub_src.path().to_str().unwrap(),
+            "sub",
+        ],
+    );
+    git(root.path(), &["commit", "-q", "-m", "add sub"]);
+    (root, sub_src)
+}
+
 fn bench_markdown_links_evaluate(c: &mut Criterion) {
     let mut group = c.benchmark_group("markdown_links_evaluate");
+
+    // Submodule fixture: links and anchors resolved at the gitlink revision.
+    for &doc_count in &[10usize, 50] {
+        let (root, _sub_src) = create_submodule_workspace(doc_count);
+        let repo_root = root.path().to_path_buf();
+        group.bench_with_input(
+            BenchmarkId::new("submodule_workspace", format!("docs{doc_count}")),
+            &repo_root,
+            |b, path| {
+                b.iter(|| {
+                    let result = evaluate(path, &[]);
+                    assert_eq!(result.metric.blocking_findings, 0);
+                    assert!(result.metric.links_checked >= doc_count * 2);
+                });
+            },
+        );
+    }
 
     // Scenarios varying background file count to measure traversal / pruning overhead
     for &(guidance_count, bg_count) in &[(10, 50), (25, 200), (50, 500)] {

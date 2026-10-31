@@ -1,12 +1,15 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap, HashSet},
     fs,
     path::{Component, Path, PathBuf},
+    sync::Arc,
+    time::Duration,
 };
 
 use git2::{Oid, Repository, TreeWalkMode, TreeWalkResult};
 use ignore::WalkBuilder;
-use pulldown_cmark::{Event, Parser, Tag};
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -55,6 +58,14 @@ pub enum LinkClass {
     /// Target is inside a nested repository that has no gitlink entry at the
     /// active revision (TD14).
     SubmoduleGitlinkMissing,
+    /// `#fragment` matches no heading slug or HTML `id`/`name` in the target
+    /// Markdown document (TD7).
+    MissingAnchor,
+    /// Opt-in external check: HTTP status >= 400 (except 429) or transport
+    /// error (TD8).
+    ExternalUnreachable,
+    /// Opt-in external check: HTTP 429; reported but not blocking.
+    ExternalRateLimited,
 }
 
 impl LinkClass {
@@ -74,6 +85,9 @@ impl LinkClass {
                 "markdown_link_submodule_revision_unavailable"
             }
             LinkClass::SubmoduleGitlinkMissing => "markdown_link_submodule_gitlink_missing",
+            LinkClass::MissingAnchor => "markdown_link_missing_anchor",
+            LinkClass::ExternalUnreachable => "markdown_link_external_unreachable",
+            LinkClass::ExternalRateLimited => "markdown_link_external_rate_limited",
         }
     }
 
@@ -90,6 +104,8 @@ impl LinkClass {
                 | LinkClass::SubmoduleRevisionMissingTarget
                 | LinkClass::SubmoduleRevisionUnavailable
                 | LinkClass::SubmoduleGitlinkMissing
+                | LinkClass::MissingAnchor
+                | LinkClass::ExternalUnreachable
         )
     }
 }
@@ -101,6 +117,9 @@ pub struct EvaluateOptions {
     pub include_historical: bool,
     /// Extra repo-relative paths to exclude from the source walk.
     pub exclude_paths: Vec<String>,
+    /// Opt-in (TD8): issue HTTP requests for `http(s)` destinations.
+    /// Default `false`; no network access happens unless enabled.
+    pub check_external: bool,
 }
 
 pub struct MarkdownLinkResult {
@@ -110,9 +129,287 @@ pub struct MarkdownLinkResult {
 
 enum DestinationShape<'a> {
     Local(&'a str),
-    External,
+    /// `http(s)` destination (candidate for the opt-in external check).
+    Web,
+    /// `mailto:` / `data:` destination; never resolved.
+    OtherExternal,
     FragmentOnly,
     Unsupported,
+}
+
+/// Link anchors of one Markdown document (TD7).
+#[derive(Default)]
+struct Anchors {
+    /// GitHub-style heading slugs, with duplicate suffixes applied.
+    slugs: HashSet<String>,
+    /// Explicit HTML `id=` / `name=` attribute values.
+    ids: HashSet<String>,
+}
+
+impl Anchors {
+    fn matches(&self, fragment: &str) -> bool {
+        self.ids.contains(fragment)
+            || self.slugs.contains(fragment)
+            || self.slugs.contains(&fragment.to_lowercase())
+    }
+}
+
+struct RawLink {
+    line: usize,
+    destination: String,
+}
+
+/// Result of the parallel read+parse phase for one source file.
+struct ParsedSource {
+    /// `None` when the file could not be read as UTF-8.
+    links: Option<Vec<RawLink>>,
+    /// Own anchors, kept only when a fragment-only link needs them.
+    own_anchors: Option<Arc<Anchors>>,
+}
+
+/// GitHub-style heading slug: lowercase, keep alphanumerics, `-`, `_` and
+/// spaces, then spaces become `-`.
+fn slugify(text: &str) -> String {
+    text.to_lowercase()
+        .chars()
+        .filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_'))
+        .map(|c| if c == ' ' { '-' } else { c })
+        .collect()
+}
+
+/// Collects `id="…"` / `name="…"` attribute values from a raw HTML chunk.
+fn collect_html_ids(html: &str, ids: &mut HashSet<String>) {
+    let bytes = html.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let rest = &html[index..];
+        let name_len = if rest.starts_with("id") {
+            2
+        } else if rest.starts_with("name") {
+            4
+        } else {
+            index += 1;
+            continue;
+        };
+        let preceded_by_space = index > 0 && bytes[index - 1].is_ascii_whitespace();
+        let mut cursor = index + name_len;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if !preceded_by_space || cursor >= bytes.len() || bytes[cursor] != b'=' {
+            index += name_len;
+            continue;
+        }
+        cursor += 1;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        let value = match bytes.get(cursor) {
+            Some(&quote @ (b'"' | b'\'')) => {
+                let start = cursor + 1;
+                let len = html[start..]
+                    .find(quote as char)
+                    .unwrap_or(html.len() - start);
+                cursor = start + len;
+                &html[start..start + len]
+            }
+            Some(_) => {
+                let start = cursor;
+                while cursor < bytes.len()
+                    && !bytes[cursor].is_ascii_whitespace()
+                    && bytes[cursor] != b'>'
+                {
+                    cursor += 1;
+                }
+                &html[start..cursor]
+            }
+            None => "",
+        };
+        if !value.is_empty() {
+            ids.insert(value.to_string());
+        }
+        index = cursor.max(index + name_len);
+    }
+}
+
+/// One pass over a Markdown document: link destinations (inline, reference,
+/// autolink, image) with their line numbers, plus its anchors.
+fn parse_markdown(contents: &str) -> (Vec<RawLink>, Anchors) {
+    let line_index = LineIndex::new(contents);
+    let mut links = Vec::new();
+    let mut anchors = Anchors::default();
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    let mut heading: Option<String> = None;
+    for (event, range) in Parser::new(contents).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Link { dest_url, .. })
+            | Event::Start(Tag::Image { dest_url, .. }) => {
+                links.push(RawLink {
+                    line: line_index.line_number(range.start),
+                    destination: dest_url.into_string(),
+                });
+            }
+            Event::Start(Tag::Heading { .. }) => heading = Some(String::new()),
+            Event::End(TagEnd::Heading(_)) => {
+                if let Some(text) = heading.take() {
+                    let base = slugify(&text);
+                    let mut candidate = base.clone();
+                    if anchors.slugs.contains(&candidate) {
+                        let next = counts.entry(base.clone()).or_insert(1);
+                        loop {
+                            candidate = format!("{base}-{next}");
+                            *next += 1;
+                            if !anchors.slugs.contains(&candidate) {
+                                break;
+                            }
+                        }
+                    }
+                    anchors.slugs.insert(candidate);
+                }
+            }
+            Event::Text(text) | Event::Code(text) => {
+                if let Some(buffer) = heading.as_mut() {
+                    buffer.push_str(&text);
+                }
+            }
+            Event::Html(html) | Event::InlineHtml(html) => {
+                collect_html_ids(&html, &mut anchors.ids);
+            }
+            _ => {}
+        }
+    }
+    (links, anchors)
+}
+
+/// `#L10`, `#L10-L20`, `#L10C2-L12C4`: GitHub line-range anchors, never
+/// checked against headings.
+fn is_line_anchor(fragment: &str) -> bool {
+    let Some(rest) = fragment.strip_prefix('L') else {
+        return false;
+    };
+    let mut seen_digit = false;
+    for c in rest.chars() {
+        match c {
+            '0'..='9' => seen_digit = true,
+            'C' | '-' | 'L' if seen_digit => {}
+            _ => return false,
+        }
+    }
+    seen_digit
+}
+
+fn decode_fragment(fragment: &str) -> String {
+    let bytes = fragment.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'%'
+            && index + 2 < bytes.len()
+            && let (Some(high), Some(low)) =
+                (hex_digit(bytes[index + 1]), hex_digit(bytes[index + 2]))
+        {
+            out.push((high << 4) | low);
+            index += 3;
+            continue;
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Fragment of a destination, if it has a non-empty checkable one.
+fn checkable_fragment(destination: &str) -> Option<String> {
+    let (_, fragment) = destination.split_once('#')?;
+    let decoded = decode_fragment(fragment);
+    if decoded.is_empty() || is_line_anchor(&decoded) {
+        None
+    } else {
+        Some(decoded)
+    }
+}
+
+fn is_markdown_path(path: &str) -> bool {
+    Path::new(path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+}
+
+/// Per-target anchor cache keyed by `(repo node, revision?, path)`.
+type AnchorCache = HashMap<(usize, Option<Oid>, String), Option<Arc<Anchors>>>;
+
+/// Outcome of one external URL check.
+enum ExternalOutcome {
+    Reachable,
+    RateLimited(u16),
+    Unreachable(String),
+}
+
+struct PendingExternal {
+    path: String,
+    guidance: bool,
+    repository: String,
+    line: usize,
+    destination: String,
+}
+
+const EXTERNAL_TIMEOUT: Duration = Duration::from_secs(10);
+const EXTERNAL_CONCURRENCY: usize = 8;
+
+fn check_url(client: &reqwest::blocking::Client, url: &str) -> ExternalOutcome {
+    let status_of = |result: Result<reqwest::blocking::Response, reqwest::Error>| {
+        result.map(|response| response.status().as_u16())
+    };
+    let mut status = status_of(client.head(url).send());
+    if matches!(status, Ok(403 | 405)) {
+        status = status_of(client.get(url).send());
+    }
+    match status {
+        Ok(429) => ExternalOutcome::RateLimited(429),
+        Ok(code) if code >= 400 => ExternalOutcome::Unreachable(format!("HTTP status {code}")),
+        Ok(_) => ExternalOutcome::Reachable,
+        Err(error) => ExternalOutcome::Unreachable(format!("request failed: {error}")),
+    }
+}
+
+/// Checks each distinct URL once, with at most [`EXTERNAL_CONCURRENCY`]
+/// requests in flight.
+fn check_urls(urls: &BTreeSet<String>) -> HashMap<String, ExternalOutcome> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(EXTERNAL_TIMEOUT)
+        .user_agent("audit-markdown-links")
+        .build();
+    let client = match client {
+        Ok(client) => client,
+        Err(error) => {
+            return urls
+                .iter()
+                .map(|url| {
+                    (
+                        url.clone(),
+                        ExternalOutcome::Unreachable(format!("HTTP client unavailable: {error}")),
+                    )
+                })
+                .collect();
+        }
+    };
+    let list: Vec<&String> = urls.iter().collect();
+    let run = || -> HashMap<String, ExternalOutcome> {
+        list.par_iter()
+            .map(|url| ((*url).clone(), check_url(&client, url)))
+            .collect()
+    };
+    match rayon::ThreadPoolBuilder::new()
+        .num_threads(EXTERNAL_CONCURRENCY)
+        .build()
+    {
+        Ok(pool) => pool.install(run),
+        Err(_) => list
+            .iter()
+            .map(|url| ((*url).clone(), check_url(&client, url)))
+            .collect(),
+    }
 }
 
 struct LineIndex {
@@ -375,6 +672,21 @@ impl RepoSet {
         self.exists_cache.insert(key, exists);
         Ok(exists)
     }
+
+    /// Contents of the blob at `path` in the submodule's recorded tree
+    /// (`None` when absent or not a blob).
+    fn blob_at_revision(&mut self, idx: usize, path: &str) -> Result<Option<Vec<u8>>, String> {
+        let tree_id = self.root_tree(idx)?;
+        let repo = self.nodes[idx].repo.as_ref().expect("opened by root_tree");
+        let tree = repo.find_tree(tree_id).map_err(|e| e.to_string())?;
+        let Ok(entry) = tree.get_path(Path::new(path)) else {
+            return Ok(None);
+        };
+        match repo.find_blob(entry.id()) {
+            Ok(blob) => Ok(Some(blob.content().to_vec())),
+            Err(_) => Ok(None),
+        }
+    }
 }
 
 fn relative_slash(base: &Path, path: &Path) -> String {
@@ -405,6 +717,7 @@ pub fn evaluate(repo_root: &Path, exclude_paths: &[String]) -> MarkdownLinkResul
         &EvaluateOptions {
             include_historical: false,
             exclude_paths: exclude_paths.to_vec(),
+            check_external: false,
         },
     )
 }
@@ -422,8 +735,30 @@ pub fn evaluate_with_options(repo_root: &Path, options: &EvaluateOptions) -> Mar
     let mut unreadable_links = 0usize;
     let mut findings: Vec<AuditFinding> = Vec::new();
     let mut existence_cache = HashMap::<PathBuf, bool>::new();
+    let mut anchor_cache = AnchorCache::new();
+    let mut pending_external: Vec<PendingExternal> = Vec::new();
 
-    for source in &sources {
+    // Parallel phase (TD9): read + parse every source once.
+    let parsed: Vec<ParsedSource> = sources
+        .par_iter()
+        .map(|source| {
+            let Ok(contents) = fs::read_to_string(repo_root.join(&source.rel)) else {
+                return ParsedSource {
+                    links: None,
+                    own_anchors: None,
+                };
+            };
+            let (links, anchors) = parse_markdown(&contents);
+            let needs_own = links.iter().any(|link| link.destination.starts_with('#'));
+            ParsedSource {
+                links: Some(links),
+                own_anchors: needs_own.then(|| Arc::new(anchors)),
+            }
+        })
+        .collect();
+
+    // Sequential phase: classification needs the (non-`Sync`) git handles.
+    for (source, parsed_source) in sources.iter().zip(parsed) {
         let file = source.rel.as_str();
         let source_path = repo_root.join(file);
         let source_repository = repos.nodes[source.node].rel.clone();
@@ -434,25 +769,52 @@ pub fn evaluate_with_options(repo_root: &Path, options: &EvaluateOptions) -> Mar
             guidance: is_guidance_source(&in_repo),
             repository: &source_repository,
         };
-        let Ok(contents) = fs::read_to_string(&source_path) else {
+        let Some(links) = parsed_source.links else {
             unreadable_links += 1;
             findings.push(unreadable_source_finding(&src));
             continue;
         };
-        let line_index = LineIndex::new(&contents);
+        let own_anchors = parsed_source.own_anchors;
 
-        for (event, range) in Parser::new(&contents).into_offset_iter() {
-            let dest_url = match event {
-                Event::Start(Tag::Link { dest_url, .. })
-                | Event::Start(Tag::Image { dest_url, .. }) => dest_url,
-                _ => continue,
-            };
-            let destination = dest_url.as_ref();
-            let line = line_index.line_number(range.start);
+        for raw_link in &links {
+            let destination = raw_link.destination.as_str();
+            let line = raw_link.line;
+            let findings_before = findings.len();
 
             let local_path = match classify_destination(destination) {
-                DestinationShape::External | DestinationShape::FragmentOnly => {
+                DestinationShape::OtherExternal => {
                     skipped_links += 1;
+                    continue;
+                }
+                DestinationShape::Web => {
+                    skipped_links += 1;
+                    if options.check_external {
+                        pending_external.push(PendingExternal {
+                            path: file.to_string(),
+                            guidance: src.guidance,
+                            repository: source_repository.clone(),
+                            line,
+                            destination: destination.to_string(),
+                        });
+                    }
+                    continue;
+                }
+                DestinationShape::FragmentOnly => {
+                    links_checked += 1;
+                    if let (Some(fragment), Some(anchors)) =
+                        (checkable_fragment(destination), own_anchors.as_ref())
+                        && !anchors.matches(&fragment)
+                    {
+                        broken_links += 1;
+                        findings.push(missing_anchor_finding(
+                            &src,
+                            line,
+                            destination,
+                            &fragment,
+                            file,
+                            None,
+                        ));
+                    }
                     continue;
                 }
                 DestinationShape::Unsupported => {
@@ -602,8 +964,92 @@ pub fn evaluate_with_options(repo_root: &Path, options: &EvaluateOptions) -> Mar
                     &target_repository,
                 ));
             }
+
+            // TD7: anchor check once the target itself resolved cleanly.
+            if findings.len() == findings_before
+                && is_markdown_path(&remainder)
+                && let Some(fragment) = checkable_fragment(destination)
+            {
+                let at_revision = target_node != source.node;
+                let anchors = lookup_anchors(
+                    &mut repos,
+                    &mut anchor_cache,
+                    target_node,
+                    at_revision,
+                    &remainder,
+                    &target_path,
+                );
+                if let Some(anchors) = anchors
+                    && !anchors.matches(&fragment)
+                {
+                    broken_links += 1;
+                    let revision = at_revision
+                        .then(|| repos.nodes[target_node].commit.map(|oid| oid.to_string()))
+                        .flatten();
+                    findings.push(missing_anchor_finding(
+                        &src,
+                        line,
+                        destination,
+                        &fragment,
+                        &target_relative,
+                        revision,
+                    ));
+                }
+            }
         }
     }
+
+    // Opt-in external checks (TD8): one request chain per distinct URL.
+    if !pending_external.is_empty() {
+        let urls: BTreeSet<String> = pending_external
+            .iter()
+            .map(|pending| url_without_fragment(&pending.destination).to_string())
+            .collect();
+        let outcomes = check_urls(&urls);
+        for pending in &pending_external {
+            let url = url_without_fragment(&pending.destination);
+            let src = Src {
+                path: &pending.path,
+                guidance: pending.guidance,
+                repository: &pending.repository,
+            };
+            links_checked += 1;
+            match outcomes.get(url) {
+                Some(ExternalOutcome::Unreachable(reason)) => {
+                    broken_links += 1;
+                    findings.push(external_finding(
+                        LinkClass::ExternalUnreachable,
+                        &src,
+                        pending.line,
+                        &pending.destination,
+                        reason,
+                        None,
+                    ));
+                }
+                Some(ExternalOutcome::RateLimited(status)) => {
+                    findings.push(external_finding(
+                        LinkClass::ExternalRateLimited,
+                        &src,
+                        pending.line,
+                        &pending.destination,
+                        "HTTP status 429 (rate limited)",
+                        Some(*status),
+                    ));
+                }
+                Some(ExternalOutcome::Reachable) | None => {}
+            }
+        }
+    }
+
+    // Deterministic output regardless of scheduling (TD9).
+    findings.sort_by(|a, b| {
+        (&a.path, a.line, &a.category, a.metric_value.to_string()).cmp(&(
+            &b.path,
+            b.line,
+            &b.category,
+            b.metric_value.to_string(),
+        ))
+    });
 
     let blocking_findings = findings
         .iter()
@@ -635,6 +1081,111 @@ pub fn evaluate_with_options(repo_root: &Path, options: &EvaluateOptions) -> Mar
     }
 }
 
+fn url_without_fragment(destination: &str) -> &str {
+    destination.split('#').next().unwrap_or(destination)
+}
+
+/// Anchors of a Markdown target, computed once per `(repo, revision?, path)`.
+/// Submodule targets are read from the blob at the recorded gitlink commit;
+/// same-repository targets from the working tree. Unreadable or non-UTF-8
+/// targets are not anchor-checked.
+fn lookup_anchors(
+    repos: &mut RepoSet,
+    cache: &mut AnchorCache,
+    node: usize,
+    at_revision: bool,
+    path_in_repo: &str,
+    target_path: &Path,
+) -> Option<Arc<Anchors>> {
+    let revision = if at_revision {
+        repos.nodes[node].commit
+    } else {
+        None
+    };
+    let key_path = if at_revision {
+        path_in_repo.to_string()
+    } else {
+        target_path.to_string_lossy().into_owned()
+    };
+    let key = (node, revision, key_path);
+    if let Some(cached) = cache.get(&key) {
+        return cached.clone();
+    }
+    let contents = if at_revision {
+        repos
+            .blob_at_revision(node, path_in_repo)
+            .ok()
+            .flatten()
+            .and_then(|bytes| String::from_utf8(bytes).ok())
+    } else if target_path.is_file() {
+        fs::read_to_string(target_path).ok()
+    } else {
+        None
+    };
+    let anchors = contents.map(|text| Arc::new(parse_markdown(&text).1));
+    cache.insert(key, anchors.clone());
+    anchors
+}
+
+fn missing_anchor_finding(
+    src: &Src<'_>,
+    line: usize,
+    destination: &str,
+    fragment: &str,
+    target_relative: &str,
+    revision: Option<String>,
+) -> AuditFinding {
+    let file = src.path;
+    let mut evidence = Map::from_iter([
+        ("fragment".to_string(), json!(fragment)),
+        ("resolved_target".to_string(), json!(target_relative)),
+    ]);
+    if let Some(revision) = &revision {
+        evidence.insert("revision".to_string(), json!(revision));
+    }
+    link_finding(
+        LinkClass::MissingAnchor,
+        src,
+        line,
+        destination,
+        format!(
+            "Markdown link in {file}:{line} points to anchor '#{fragment}' which does not exist in '{target_relative}'."
+        ),
+        vec![format!(
+            "Update the fragment to match a current heading slug or HTML id/name in '{target_relative}'."
+        )],
+        evidence,
+    )
+}
+
+fn external_finding(
+    class: LinkClass,
+    src: &Src<'_>,
+    line: usize,
+    destination: &str,
+    reason: &str,
+    status: Option<u16>,
+) -> AuditFinding {
+    let file = src.path;
+    let mut evidence = Map::from_iter([("reason".to_string(), json!(reason))]);
+    if let Some(status) = status {
+        evidence.insert("status".to_string(), json!(status));
+    }
+    link_finding(
+        class,
+        src,
+        line,
+        destination,
+        format!(
+            "External link in {file}:{line} '{destination}' failed the opt-in check: {reason}."
+        ),
+        vec![format!(
+            "Verify '{destination}' is reachable, or replace/remove the link in {file}:{line}."
+        )],
+        evidence,
+    )
+}
+
 fn nearest_existing_dir(path: &Path) -> PathBuf {
     let mut current = path.to_path_buf();
     loop {
@@ -655,10 +1206,10 @@ fn classify_destination(destination: &str) -> DestinationShape<'_> {
         return DestinationShape::FragmentOnly;
     }
     if path.starts_with("mailto:") || path.starts_with("data:") {
-        return DestinationShape::External;
+        return DestinationShape::OtherExternal;
     }
     if path.starts_with("http://") || path.starts_with("https://") {
-        return DestinationShape::External;
+        return DestinationShape::Web;
     }
     if path.starts_with("//") || path.contains("://") {
         return DestinationShape::Unsupported;
@@ -742,7 +1293,11 @@ fn link_finding(
     AuditFinding {
         id: format!("{}:{file}:{line}:{destination}", class.category()),
         category: class.category().to_string(),
-        severity: Severity::High,
+        severity: if class.is_blocking() {
+            Severity::High
+        } else {
+            Severity::Low
+        },
         summary,
         path: Some(file.to_string()),
         line: Some(line),
@@ -1104,16 +1659,16 @@ mod tests {
         std::fs::write(repo.path().join("README.md"), "# Repo\n").unwrap();
         std::fs::write(
             repo.path().join(".agents/instructions/links.md"),
-            "[good](../../README.md)\n[bad](missing.md)\n[web](https://example.com)\n[anchor](#section)\n",
+            "[good](../../README.md)\n[bad](missing.md)\n[web](https://example.com)\n[anchor](#repo)\n\n# Repo\n",
         )
         .unwrap();
 
         let result = evaluate(repo.path(), &[]);
 
         assert_eq!(result.metric.markdown_files, 2);
-        assert_eq!(result.metric.links_checked, 2);
+        assert_eq!(result.metric.links_checked, 3);
         assert_eq!(result.metric.broken_links, 1);
-        assert_eq!(result.metric.skipped_links, 2);
+        assert_eq!(result.metric.skipped_links, 1);
         assert_eq!(result.metric.blocking_findings, 1);
         assert_eq!(result.findings[0].line, Some(2));
         assert_eq!(
@@ -1439,6 +1994,213 @@ mod tests {
                 .as_deref()
                 .unwrap_or("")
                 .starts_with("mid/inner"))
+        );
+    }
+
+    fn anchor_result(target: &str, link: &str) -> MarkdownLinkResult {
+        let repo = init_repo(&[("other.md", target), ("a.md", link), ("code.rs", "//\n")]);
+        evaluate(repo.path(), &[])
+    }
+
+    // Part 02 test 1
+    #[test]
+    fn heading_slug_with_parentheses_matches() {
+        let result = anchor_result(
+            "## Ambiguity Resolution Gate (before prompt-ingestion Stage 2)\n",
+            "[a](other.md#ambiguity-resolution-gate-before-prompt-ingestion-stage-2)\n",
+        );
+        assert!(result.findings.is_empty(), "{:?}", categories(&result));
+    }
+
+    // Part 02 test 2
+    #[test]
+    fn heading_slug_drops_dots_in_file_names() {
+        let result = anchor_result(
+            "## audio-transcript.instructions.md Stage 1\n",
+            "[a](other.md#audio-transcriptinstructionsmd-stage-1)\n",
+        );
+        assert!(result.findings.is_empty(), "{:?}", categories(&result));
+    }
+
+    // Part 02 test 3
+    #[test]
+    fn duplicate_headings_get_numeric_suffixes() {
+        let result = anchor_result(
+            "# x\n\n# x\n",
+            "[a](other.md#x) [b](other.md#x-1) [c](other.md#x-2)\n",
+        );
+        assert_eq!(
+            categories(&result),
+            vec![LinkClass::MissingAnchor.category()]
+        );
+        assert_eq!(result.findings[0].evidence["fragment"], "x-2");
+        assert_eq!(result.metric.blocking_findings, 1);
+    }
+
+    // Part 02 test 4
+    #[test]
+    fn html_id_and_name_attributes_are_anchors() {
+        let result = anchor_result(
+            "<a id=\"custom\"></a>\n\ntext <a name='legacy'>x</a> and <span id=bare>y</span>\n",
+            "[a](other.md#custom) [b](other.md#legacy) [c](other.md#bare) [d](other.md#nope)\n",
+        );
+        assert_eq!(
+            categories(&result),
+            vec![LinkClass::MissingAnchor.category()]
+        );
+        assert_eq!(result.findings[0].evidence["fragment"], "nope");
+    }
+
+    // Part 02 test 5
+    #[test]
+    fn fragment_only_missing_is_blocking_and_line_anchors_are_unchecked() {
+        let repo = init_repo(&[
+            ("code.rs", "//\n"),
+            (
+                "a.md",
+                "# Title\n[ok](#title) [bad](#missing)\n[l](code.rs#L10) [r](code.rs#L10-L20) [m](a.md#L3)\n[x](code.rs#anything)\n",
+            ),
+        ]);
+        let result = evaluate(repo.path(), &[]);
+        assert_eq!(
+            categories(&result),
+            vec![LinkClass::MissingAnchor.category()]
+        );
+        assert_eq!(result.findings[0].evidence["fragment"], "missing");
+        assert_eq!(result.findings[0].line, Some(2));
+        assert_eq!(result.metric.blocking_findings, 1);
+    }
+
+    // Part 02 test 6
+    #[test]
+    fn submodule_anchor_is_read_from_gitlink_blob_not_working_tree() {
+        let (root, _sub) = root_with_sub(
+            "[old](sub/docs/x.md#old-heading)\n[new](sub/docs/x.md#new-heading)\n",
+            &[("docs/x.md", "# Old Heading\n"), ("README.md", "# sub\n")],
+        );
+        write(&root.path().join("sub"), "docs/x.md", "# New Heading\n");
+        let result = evaluate(root.path(), &[]);
+        assert_eq!(
+            categories(&result),
+            vec![LinkClass::MissingAnchor.category()]
+        );
+        assert_eq!(result.findings[0].evidence["fragment"], "new-heading");
+        assert_eq!(result.findings[0].line, Some(2));
+        assert!(result.findings[0].evidence["revision"].is_string());
+    }
+
+    /// Minimal local HTTP stub; records `METHOD /path` per request.
+    fn spawn_stub() -> (String, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
+        use std::io::{Read, Write};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let log = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let thread_log = log.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let log = thread_log.clone();
+                std::thread::spawn(move || {
+                    let mut buffer = Vec::new();
+                    let mut chunk = [0u8; 512];
+                    while !buffer.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match stream.read(&mut chunk) {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => buffer.extend_from_slice(&chunk[..n]),
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&buffer).into_owned();
+                    let mut parts = text.lines().next().unwrap_or("").split_whitespace();
+                    let method = parts.next().unwrap_or("").to_string();
+                    let path = parts.next().unwrap_or("").to_string();
+                    log.lock().unwrap().push(format!("{method} {path}"));
+                    let status = match (method.as_str(), path.as_str()) {
+                        (_, "/missing") => "404 Not Found",
+                        (_, "/limited") => "429 Too Many Requests",
+                        ("HEAD", "/head405") => "405 Method Not Allowed",
+                        _ => "200 OK",
+                    };
+                    let _ = write!(
+                        stream,
+                        "HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                    );
+                });
+            }
+        });
+        (base, log)
+    }
+
+    // Part 02 test 7
+    #[test]
+    fn external_links_are_checked_only_when_opted_in() {
+        let (base, log) = spawn_stub();
+        let readme = format!(
+            "[a]({base}/ok) [b]({base}/missing) [c]({base}/limited) [d]({base}/head405) [e]({base}/ok#frag)\n"
+        );
+        let repo = init_repo(&[("README.md", readme.as_str())]);
+
+        let off = evaluate_with_options(repo.path(), &EvaluateOptions::default());
+        assert!(off.findings.is_empty());
+        assert!(log.lock().unwrap().is_empty(), "no request when disabled");
+
+        let on = evaluate_with_options(
+            repo.path(),
+            &EvaluateOptions {
+                check_external: true,
+                ..EvaluateOptions::default()
+            },
+        );
+        assert_eq!(
+            categories(&on),
+            vec![
+                LinkClass::ExternalRateLimited.category(),
+                LinkClass::ExternalUnreachable.category()
+            ]
+        );
+        assert_eq!(on.findings[0].evidence["blocking"], false);
+        assert_eq!(on.findings[1].evidence["blocking"], true);
+        assert_eq!(on.metric.blocking_findings, 1);
+        let requests = log.lock().unwrap().clone();
+        let count = |needle: &str| requests.iter().filter(|r| r.as_str() == needle).count();
+        assert_eq!(count("HEAD /ok"), 1, "URLs are de-duplicated: {requests:?}");
+        assert_eq!(count("HEAD /head405"), 1);
+        assert_eq!(count("GET /head405"), 1, "GET fallback after 405");
+        assert_eq!(count("GET /missing"), 0);
+    }
+
+    // Part 02 test 8
+    #[test]
+    fn finding_order_is_deterministic() {
+        let mut files: Vec<(String, String)> = (0..40)
+            .map(|i| {
+                (
+                    format!("docs/d{i}.md"),
+                    "[a](#nope) [b](missing.md) [c](#also)\n".to_string(),
+                )
+            })
+            .collect();
+        files.push(("README.md".to_string(), "# r\n".to_string()));
+        let refs: Vec<(&str, &str)> = files
+            .iter()
+            .map(|(p, c)| (p.as_str(), c.as_str()))
+            .collect();
+        let repo = init_repo(&refs);
+        let ids =
+            |r: &MarkdownLinkResult| r.findings.iter().map(|f| f.id.clone()).collect::<Vec<_>>();
+        let first = ids(&evaluate(repo.path(), &[]));
+        assert_eq!(first.len(), 120);
+        assert_eq!(first, ids(&evaluate(repo.path(), &[])));
+        let mut sorted = first.clone();
+        sorted.sort_by_key(|id| id.split(':').nth(1).map(str::to_string));
+        assert_eq!(
+            first
+                .iter()
+                .map(|id| id.split(':').nth(1))
+                .collect::<Vec<_>>(),
+            sorted
+                .iter()
+                .map(|id| id.split(':').nth(1))
+                .collect::<Vec<_>>()
         );
     }
 }
