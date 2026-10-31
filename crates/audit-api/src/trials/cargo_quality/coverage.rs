@@ -167,9 +167,10 @@ pub(super) fn collect_coverage(
     });
 
     let mut findings = Vec::new();
-    if let Some(line_percent) = line_percent {
-        if line_percent < warn_below {
-            findings.push(AuditFinding {
+    if let Some(line_percent) = line_percent
+        && line_percent < warn_below
+    {
+        findings.push(AuditFinding {
                 id: "coverage_below_threshold".to_string(),
                 category: "coverage".to_string(),
                 severity: Severity::Medium,
@@ -192,7 +193,6 @@ pub(super) fn collect_coverage(
                     "total_lines": total_lines,
                 }),
             });
-        }
     }
 
     Ok(CoverageTrialResult {

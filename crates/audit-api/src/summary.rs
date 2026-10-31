@@ -179,7 +179,7 @@ fn workspace_package_roots(repo_root: &Path) -> Result<Vec<PackageRoot>, AuditEr
             let Some(source_path) = source_path else {
                 continue;
             };
-            let Ok(relative_source_path) = source_path.strip_prefix(&repo_root) else {
+            let Ok(relative_source_path) = source_path.strip_prefix(repo_root) else {
                 continue;
             };
 

@@ -108,10 +108,10 @@ impl RepositoryIndex {
             if !entry.file_type()?.is_dir() {
                 continue;
             }
-            if let Some(name) = entry.file_name().to_str() {
-                if let Ok(id) = name.parse::<Uuid>() {
-                    ids.push(id);
-                }
+            if let Some(name) = entry.file_name().to_str()
+                && let Ok(id) = name.parse::<Uuid>()
+            {
+                ids.push(id);
             }
         }
         ids.sort();

@@ -60,7 +60,7 @@ fn build_audit_fixture(
     fs::create_dir_all(target_workspace.join(AUDIT_INDEX_DIR))
         .expect("create target audit index dir");
 
-    let index = RepositoryIndex::init(&source_workspace).expect("init audit index");
+    let index = RepositoryIndex::init(source_workspace).expect("init audit index");
 
     for offset in 0..background_count {
         fs::write(

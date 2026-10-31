@@ -186,7 +186,7 @@ fn move_plans_blocked_when_audit_entity_has_no_folder() {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["status"], "blocked");
             assert_eq!(value["mode"], "plan");
-            assert!(value["plan"]["blockers"].as_array().unwrap().len() > 0);
+            assert!(!value["plan"]["blockers"].as_array().unwrap().is_empty());
         }
         other => panic!("unexpected output: {other:?}"),
     }
@@ -284,11 +284,10 @@ fn move_applies_resumes_and_rolls_back_entity_folder_finding() {
         CliOutput::Machine(value, _) => {
             assert_eq!(value["status"], "ok");
             assert_eq!(value["mode"], "execute");
-            let journal_id = value["outcome"]["journal"]["id"]
+            value["outcome"]["journal"]["id"]
                 .as_str()
                 .expect("journal id")
-                .to_string();
-            journal_id
+                .to_string()
         }
         other => panic!("unexpected output: {other:?}"),
     };

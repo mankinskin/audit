@@ -72,30 +72,30 @@ pub fn collect_compiler_warnings(
         let Ok(message) = message else {
             continue;
         };
-        if let Message::CompilerMessage(compiler_message) = message {
-            if compiler_message.message.level == DiagnosticLevel::Warning {
-                let primary_span = compiler_message
-                    .message
-                    .spans
-                    .iter()
-                    .find(|span| span.is_primary);
-                if primary_span.is_some_and(|span| {
-                    is_file_name_excluded(repo_root, &span.file_name, exclude_paths)
-                }) {
-                    continue;
-                }
-                warnings.push(json!({
-                    "message": compiler_message.message.message,
-                    "code": compiler_message.message.code.as_ref().map(|code| code.code.clone()),
-                    "path": primary_span.map(|span| normalize_output_text(&span.file_name)),
-                    "line": primary_span.map(|span| span.line_start),
-                    "rendered": compiler_message
-                        .message
-                        .rendered
-                        .as_deref()
-                        .map(normalize_output_text),
-                }));
+        if let Message::CompilerMessage(compiler_message) = message
+            && compiler_message.message.level == DiagnosticLevel::Warning
+        {
+            let primary_span = compiler_message
+                .message
+                .spans
+                .iter()
+                .find(|span| span.is_primary);
+            if primary_span.is_some_and(|span| {
+                is_file_name_excluded(repo_root, &span.file_name, exclude_paths)
+            }) {
+                continue;
             }
+            warnings.push(json!({
+                "message": compiler_message.message.message,
+                "code": compiler_message.message.code.as_ref().map(|code| code.code.clone()),
+                "path": primary_span.map(|span| normalize_output_text(&span.file_name)),
+                "line": primary_span.map(|span| span.line_start),
+                "rendered": compiler_message
+                    .message
+                    .rendered
+                    .as_deref()
+                    .map(normalize_output_text),
+            }));
         }
     }
 
