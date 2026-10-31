@@ -2,7 +2,7 @@
 
 /// Percent-decodes `value` on bytes and builds UTF-8 (`from_utf8_lossy` for
 /// invalid sequences), so non-ASCII paths decode correctly.
-pub(crate) fn percent_decode(value: &str) -> String {
+pub fn decode_percent(value: &str) -> String {
     let bytes = value.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -35,7 +35,7 @@ fn hex_digit(value: u8) -> Option<u8> {
 /// lexically collapsing `.` and `..`. Returns the `/`-joined result, or `None`
 /// when it escapes above the root.
 pub fn resolve_local(base_dir: &str, path: &str) -> Option<String> {
-    let decoded = percent_decode(path);
+    let decoded = decode_percent(path);
     let mut parts: Vec<&str> = Vec::new();
     for segment in base_dir.split('/').chain(decoded.split('/')) {
         match segment {
@@ -68,14 +68,14 @@ pub fn encode_destination(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{encode_destination, percent_decode, resolve_local};
+    use super::{encode_destination, decode_percent, resolve_local};
 
     #[test]
     fn decodes_percent_escapes() {
         assert_eq!(resolve_local("a", "b%20c.md").as_deref(), Some("a/b c.md"));
-        assert_eq!(percent_decode("100%"), "100%");
-        assert_eq!(percent_decode("%zz%4"), "%zz%4");
-        assert_eq!(percent_decode("%41"), "A");
+        assert_eq!(decode_percent("100%"), "100%");
+        assert_eq!(decode_percent("%zz%4"), "%zz%4");
+        assert_eq!(decode_percent("%41"), "A");
     }
 
     #[test]

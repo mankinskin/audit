@@ -14,4 +14,4 @@ mod span;
 pub use anchors::{Anchors, anchors, checkable_fragment};
 pub use destination::{DestinationShape, classify_destination};
 pub use extract::{LinkRef, extract};
-pub use path::{encode_destination, resolve_local};
+pub use path::{decode_percent, encode_destination, resolve_local};

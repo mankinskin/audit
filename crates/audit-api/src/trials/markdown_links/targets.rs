@@ -3,28 +3,36 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use crate::markdown::resolve_local;
+use crate::markdown::decode_percent;
 
 /// Resolves a local `destination` path of the link source `source_rel`
 /// (root-relative, `/`-separated) to an absolute path under `repo_root`.
-/// `Err` carries the lexically escaped path when it leaves the root.
+///
+/// Compatibility adapter keeping the audit's historical semantics: percent
+/// decode, filesystem join to the source directory, full lexical
+/// normalization, then a containment check. `Err` carries the normalized path
+/// when it leaves the root.
 pub(super) fn resolve_target(
     repo_root: &Path,
     source_rel: &str,
     local_path: &str,
 ) -> Result<PathBuf, PathBuf> {
     let source_dir = source_rel.rsplit_once('/').map_or("", |(dir, _)| dir);
-    match resolve_local(source_dir, local_path) {
-        Some(relative) if relative.is_empty() => Ok(repo_root.to_path_buf()),
-        Some(relative) => Ok(repo_root.join(relative)),
-        None => Err(escaped_path(repo_root, source_dir, local_path)),
+    let normalized = lexical_normalize(
+        &repo_root
+            .join(source_dir)
+            .join(decode_percent(local_path)),
+    );
+    if normalized.starts_with(repo_root) {
+        Ok(normalized)
+    } else {
+        Err(normalized)
     }
 }
 
-/// Evidence-only path of a destination that escapes the root.
-fn escaped_path(repo_root: &Path, source_dir: &str, local_path: &str) -> PathBuf {
+fn lexical_normalize(path: &Path) -> PathBuf {
     let mut normalized = PathBuf::new();
-    for component in repo_root.join(source_dir).join(local_path).components() {
+    for component in path.components() {
         match component {
             Component::CurDir => {}
             Component::ParentDir => {

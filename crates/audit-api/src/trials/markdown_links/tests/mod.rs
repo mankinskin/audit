@@ -9,6 +9,7 @@ mod anchors;
 mod auditignore;
 mod external;
 mod links;
+mod resolution;
 mod shapes;
 mod submodules;
 

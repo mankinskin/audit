@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
-use crate::path::percent_decode;
+use crate::path::decode_percent;
 
 /// Link anchors of one Markdown document.
 #[derive(Debug, Default, Clone)]
@@ -150,7 +150,7 @@ fn is_line_anchor(fragment: &str) -> bool {
 /// absent, or a GitHub line anchor.
 pub fn checkable_fragment(destination: &str) -> Option<String> {
     let (_, fragment) = destination.split_once('#')?;
-    let decoded = percent_decode(fragment);
+    let decoded = decode_percent(fragment);
     if decoded.is_empty() || is_line_anchor(&decoded) {
         None
     } else {
