@@ -53,6 +53,11 @@ Options:
   is respected and symlinks are not followed. Each file belongs to its innermost repository.
 - `transcripts/` and `.workflow-tools/` are excluded unless `--include-historical` is given.
   `audit run` additionally honours `exclude_paths` from `.audit.toml`.
+- `.auditignore` files exclude further sources. They use `.gitignore` syntax
+  (globs, `!` negation, anchored `/` paths, `**`) and apply to the directory
+  that contains them and its subtree, including inside submodules. They are
+  never bypassed (not even by `--include-historical`). Excluded files are not
+  scanned as link sources but remain valid link targets.
 
 ### Guidance set
 

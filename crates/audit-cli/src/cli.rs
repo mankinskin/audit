@@ -109,6 +109,8 @@ pub struct AuditArgs {
 const LINKS_LONG_HELP: &str = "\
 Scope: every *.md in the repository and its submodules (symlinks are not followed);
 `transcripts/` and `.workflow-tools/` are skipped unless --include-historical.
+`.auditignore` files (gitignore syntax, per directory, also in submodules) exclude
+further sources and are never bypassed; excluded files remain valid link targets.
 Guidance files (.agents/**, AGENTS.md, .github/copilot-instructions.md, .claude/**)
 may only link to guidance files or any README.md.
 Cross-repository links are only valid into descendant submodules, checked at the
