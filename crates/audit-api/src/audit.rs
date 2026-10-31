@@ -41,7 +41,14 @@ pub fn audit(repo_root: &Path, config: AuditConfig) -> Result<AuditReport, Audit
     let session_workflow_graph_result = session_workflow_graph::evaluate(&repo_root);
     let rule_overlap_result = rule_overlap::evaluate(&repo_root);
     let repository_guidance_result = repository_guidance::evaluate(&repo_root);
-    let markdown_link_result = markdown_links::evaluate(&repo_root, &file_config.exclude_paths);
+    let markdown_link_result = markdown_links::evaluate_with_options(
+        &repo_root,
+        &markdown_links::EvaluateOptions {
+            include_historical: file_config.include_historical,
+            exclude_paths: file_config.exclude_paths.clone(),
+            check_external: file_config.check_external,
+        },
+    );
 
     let mut findings = file_length_result.findings;
     findings.extend(static_metrics_result.findings);

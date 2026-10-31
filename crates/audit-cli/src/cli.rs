@@ -106,11 +106,37 @@ pub struct AuditArgs {
     pub coverage_warn_below: Option<f64>,
 }
 
+const LINKS_LONG_HELP: &str = "\
+Scope: every *.md in the repository and its submodules (symlinks are not followed);
+`transcripts/` and `.workflow-tools/` are skipped unless --include-historical.
+Guidance files (.agents/**, AGENTS.md, .github/copilot-instructions.md, .claude/**)
+may only link to guidance files or any README.md.
+Cross-repository links are only valid into descendant submodules, checked at the
+gitlink commit recorded in the parent index; nested repositories without a
+gitlink, upward/sibling links, and absolute paths are blocking.
+Anchors (#fragment) must match a GitHub heading slug or an HTML id/name; line
+anchors are ignored.
+Exit code is non-zero iff blocking findings exist. Finding classes:
+missing_target, non_guidance_target, cross_repository, unsupported_dependency,
+unsafe_path, unreadable_artifact, submodule_missing_target,
+submodule_revision_unavailable, submodule_gitlink_missing, missing_anchor,
+external_unreachable (blocking); external_rate_limited (non-blocking).";
+
 #[derive(Debug, Args)]
+#[command(after_long_help = LINKS_LONG_HELP)]
 pub struct LinksArgs {
     /// Repository root to check.
     #[arg(default_value = ".")]
     pub repo_root: PathBuf,
+
+    /// Also scan `transcripts/` and `.workflow-tools/` (excluded by default).
+    #[arg(long)]
+    pub include_historical: bool,
+
+    /// Check http(s) links over the network (HEAD, GET fallback; 10 s timeout,
+    /// 8 concurrent; 429 is non-blocking). Off by default.
+    #[arg(long)]
+    pub check_external: bool,
 }
 
 #[derive(Debug, Args)]
@@ -452,7 +478,14 @@ fn run_links(args: &LinksArgs, as_json: bool, as_toon: bool) -> Result<CliOutput
         )));
     }
 
-    let result = audit_api::trials::markdown_links::evaluate(&repo_root, &[]);
+    let result = audit_api::trials::markdown_links::evaluate_with_options(
+        &repo_root,
+        &audit_api::trials::markdown_links::EvaluateOptions {
+            include_historical: args.include_historical,
+            exclude_paths: Vec::new(),
+            check_external: args.check_external,
+        },
+    );
     let payload = json!({
         "command": "links",
         "repo_root": display_path(&repo_root),
@@ -640,14 +673,24 @@ fn blocking_link_details_from_findings(findings: &[audit_api::models::AuditFindi
 
 fn render_link_check_human(payload: &Value) -> String {
     let metric = &payload["metric"];
-    format!(
+    let mut out = format!(
         "Markdown links: {} files, {} checked, {} broken, {} blocking, {} skipped",
         metric["markdown_files"].as_u64().unwrap_or_default(),
         metric["links_checked"].as_u64().unwrap_or_default(),
         metric["broken_links"].as_u64().unwrap_or_default(),
         metric["blocking_findings"].as_u64().unwrap_or_default(),
         metric["skipped_links"].as_u64().unwrap_or_default()
-    )
+    );
+    let mut by_class: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+    for finding in payload["findings"].as_array().into_iter().flatten() {
+        if let Some(category) = finding["category"].as_str() {
+            *by_class.entry(category).or_default() += 1;
+        }
+    }
+    for (category, count) in by_class {
+        out.push_str(&format!("\n  {category}: {count}"));
+    }
+    out
 }
 
 fn run_session_audit(args: &AuditArgs) -> Result<SessionAuditReport, CliRunError> {

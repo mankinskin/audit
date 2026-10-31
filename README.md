@@ -14,6 +14,12 @@ the documented commands.
 Command specifics, subcommands, and examples are documented in
 [crates/audit-cli/README.md](crates/audit-cli/README.md).
 
+`audit links [REPO]` validates Markdown links across the repository and its
+submodules (guidance-set rules, cross-repository rule, anchors, opt-in external
+checks via `--check-external`, historical areas via `--include-historical`).
+The full rules, exit codes and finding classes are in the
+[Markdown link validation section](crates/audit-cli/README.md#markdown-link-validation-audit-links).
+
 ## Quickstart
 
 ```bash

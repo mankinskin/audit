@@ -438,3 +438,34 @@ fn run_latest_session_emits_session_audit_payload() {
         other => panic!("unexpected output: {other:?}"),
     }
 }
+
+#[test]
+fn links_flags_default_to_false() {
+    let cli = parse_cli_from(["audit", "links", "/repo"]).expect("parse links");
+    match cli.command {
+        AuditCommand::Links(args) => {
+            assert!(!args.include_historical);
+            assert!(!args.check_external);
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
+
+#[test]
+fn links_flags_parse_when_given() {
+    let cli = parse_cli_from([
+        "audit",
+        "links",
+        "/repo",
+        "--include-historical",
+        "--check-external",
+    ])
+    .expect("parse links flags");
+    match cli.command {
+        AuditCommand::Links(args) => {
+            assert!(args.include_historical);
+            assert!(args.check_external);
+        }
+        other => panic!("unexpected command: {other:?}"),
+    }
+}
