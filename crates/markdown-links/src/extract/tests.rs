@@ -139,6 +139,28 @@ fn escaped_backslash_label_still_finds_the_destination() {
 }
 
 #[test]
+fn title_containing_opener_does_not_hijack_the_span() {
+    let text = "[a](x.md \"title ](x.md)\")";
+    assert_eq!(extract(text)[0].span, Some(4..8));
+    let text = "[a](x.md \"x.md\")";
+    assert_eq!(extract(text)[0].span, Some(4..8));
+}
+
+#[test]
+fn escaped_destination_after_code_span_text_is_unlocated() {
+    let text = "[see `](a_b.md)`](a\\_b.md)";
+    let links = extract(text);
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].span, None);
+}
+
+#[test]
+fn image_nested_in_link_text_locates_both() {
+    let text = "[![i](i.png)](y.md)";
+    assert_eq!(span_texts(text), [Some("y.md"), Some("i.png")]);
+}
+
+#[test]
 fn utf8_text_before_links_keeps_byte_spans() {
     let text = "café [a](é.md) ✓\n[b](x.md)";
     assert_eq!(span_texts(text), [Some("é.md"), Some("x.md")]);

@@ -2,7 +2,7 @@
 
 use std::ops::Range;
 
-use pulldown_cmark::{Event, Options, Parser, Tag};
+use pulldown_cmark::{Event, LinkType, Options, Parser, Tag, TagEnd};
 
 use crate::line_index::LineIndex;
 use crate::span::locate;
@@ -26,31 +26,60 @@ pub fn extract(text: &str) -> Vec<LinkRef> {
     let line_index = LineIndex::new(text);
     let mut links = Vec::new();
     let mut events = Parser::new_ext(text, Options::empty()).into_offset_iter();
+    // Open links/images: (index in `links`, range, max end of nested events).
+    let mut open: Vec<(usize, Range<usize>, usize)> = Vec::new();
+    // Per link: (link type, definition span), resolved when the link closes.
+    let mut pending: Vec<Option<(LinkType, Option<Range<usize>>)>> = Vec::new();
     while let Some((event, range)) = events.next() {
-        let (Event::Start(Tag::Link {
-            link_type,
-            dest_url,
-            id,
-            ..
-        })
-        | Event::Start(Tag::Image {
-            link_type,
-            dest_url,
-            id,
-            ..
-        })) = event
-        else {
-            continue;
-        };
-        let definition = events
-            .reference_definitions()
-            .get(&id)
-            .map(|definition| definition.span.clone());
-        links.push(LinkRef {
-            line: line_index.line_number(range.start),
-            span: locate(text, link_type, &range, &dest_url, definition.as_ref()),
-            destination: dest_url.into_string(),
-        });
+        match event {
+            Event::Start(Tag::Link {
+                link_type,
+                dest_url,
+                id,
+                ..
+            })
+            | Event::Start(Tag::Image {
+                link_type,
+                dest_url,
+                id,
+                ..
+            }) => {
+                for entry in &mut open {
+                    entry.2 = entry.2.max(range.end);
+                }
+                let definition = events
+                    .reference_definitions()
+                    .get(&id)
+                    .map(|definition| definition.span.clone());
+                open.push((links.len(), range.clone(), range.start + 1));
+                pending.push(Some((link_type, definition)));
+                links.push(LinkRef {
+                    line: line_index.line_number(range.start),
+                    span: None,
+                    destination: dest_url.into_string(),
+                });
+            }
+            Event::End(TagEnd::Link | TagEnd::Image) => {
+                if let Some((index, range, text_end)) = open.pop() {
+                    if let Some((link_type, definition)) = pending[index].take() {
+                        let link = &mut links[index];
+                        link.span = locate(
+                            text,
+                            link_type,
+                            &range,
+                            text_end,
+                            &link.destination,
+                            definition.as_ref(),
+                        );
+                    }
+                }
+            }
+            _ => {
+                for entry in &mut open {
+                    entry.2 = entry.2.max(range.end);
+                }
+            }
+        }
     }
     links
 }

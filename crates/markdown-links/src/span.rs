@@ -41,26 +41,28 @@ fn is_verbatim(text: &str, at: usize, dest: &str) -> bool {
 }
 
 /// Span of an inline link or image destination within the event `range`.
-fn inline_span(text: &str, range: &Range<usize>, dest: &str) -> Option<Range<usize>> {
-    let source = &text[range.clone()];
-    let candidates: Vec<usize> = source.match_indices("](").map(|(at, _)| at).collect();
-    for at in candidates.into_iter().rev() {
-        let start = skip_separator(&text[..range.end], range.start + at + 2);
-        if text.as_bytes().get(start) == Some(&b'<') {
-            return None;
-        }
-        let end = start + dest.len();
-        if end <= range.end
-            && is_verbatim(text, start, dest)
-            && text[end..range.end]
-                .chars()
-                .next()
-                .is_none_or(|c| c == ')' || c.is_whitespace())
-        {
-            return Some(start..end);
-        }
+/// `text_end` is the end of the link-text children; the destination opener is
+/// the first `](` at or after it. No other candidate is ever tried.
+fn inline_span(
+    text: &str,
+    range: &Range<usize>,
+    text_end: usize,
+    dest: &str,
+) -> Option<Range<usize>> {
+    let from = text_end.min(range.end);
+    let opener = from + text[from..range.end].find("](")?;
+    let start = skip_separator(&text[..range.end], opener + 2);
+    if text.as_bytes().get(start) == Some(&b'<') {
+        return None;
     }
-    None
+    let end = start + dest.len();
+    (end <= range.end
+        && is_verbatim(text, start, dest)
+        && text[end..range.end]
+            .chars()
+            .next()
+            .is_none_or(|c| c == ')' || c.is_whitespace()))
+    .then(|| start..end)
 }
 
 /// Span of an autolink destination: the range without its `<` and `>`.
@@ -106,11 +108,12 @@ pub(crate) fn locate(
     text: &str,
     link_type: LinkType,
     range: &Range<usize>,
+    text_end: usize,
     dest: &str,
     definition: Option<&Range<usize>>,
 ) -> Option<Range<usize>> {
     match link_type {
-        LinkType::Inline => inline_span(text, range, dest),
+        LinkType::Inline => inline_span(text, range, text_end, dest),
         LinkType::Autolink | LinkType::Email => autolink_span(text, range, dest),
         LinkType::Reference | LinkType::Collapsed | LinkType::Shortcut => {
             definition_span(text, definition?, dest)
