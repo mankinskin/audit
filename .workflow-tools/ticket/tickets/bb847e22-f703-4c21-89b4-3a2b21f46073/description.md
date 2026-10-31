@@ -1,0 +1,3 @@
+Move audit's Markdown link trial onto `markdown-links` and split it (spec `0c5727b1`, waypoint W2).
+
+Scope: replace `parse_markdown`, `LineIndex`, anchor, fragment, destination-shape, normalization and percent-decoding helpers in `audit-api/src/trials/markdown_links.rs` with crate calls; map `Absolute` to the unsupported finding; convert the file into a `markdown_links/` module directory with every file ≤500 lines; trial public API (`evaluate`, `evaluate_with_options`, `EvaluateOptions`, `LinkClass`, `MarkdownLinkResult`) unchanged. `MarkdownLinkMetric` stays in `audit_api::models` (models.rs) and is not moved.
