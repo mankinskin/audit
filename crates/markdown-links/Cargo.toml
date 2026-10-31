@@ -1,0 +1,12 @@
+[package]
+name = "markdown-links"
+version = "0.1.0"
+edition = "2024"
+description = "Shared CommonMark link parsing: link extraction with byte spans, anchors, destination shapes and path resolution"
+
+[lib]
+name = "markdown_links"
+path = "src/lib.rs"
+
+[dependencies]
+pulldown-cmark = { version = "0.12", default-features = false }

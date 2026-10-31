@@ -11,6 +11,7 @@ pub mod store_index;
 pub mod summary;
 pub mod trials;
 
+pub use markdown_links as markdown;
 pub use store_index::{
     AUDIT_INDEX_AGENT_HOOK_PATH, AuditCatalogArtifacts, AuditCatalogSource, generate_audit_catalog,
 };
