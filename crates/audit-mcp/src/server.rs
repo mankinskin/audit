@@ -23,14 +23,36 @@ mod server_move_json;
 
 use server_move_json::{move_outcome_json, move_plan_json, path_display};
 
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    #[test]
+    fn advertised_audit_contracts_expose_execution_and_store_requirements() {
+        let tools = AuditServer::tool_router().list_all();
+        assert_eq!(tools.len(), 6);
+        for name in ["audit", "audit_summary"] {
+            let tool = tools.iter().find(|tool| tool.name == name).unwrap();
+            let value = serde_json::to_value(tool).unwrap();
+            assert!(value["inputSchema"]["properties"]["repo_root"]["description"]
+                .as_str().unwrap().contains("Required explicit"));
+            assert!(tool.description.as_deref().unwrap().contains("persist"));
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AuditRepositoryInput {
+    /// Required explicit repository path despite optional schema shape. Omitted/null/empty/default/.. fail; . means server cwd.
     #[serde(default)]
     pub repo_root: Option<PathBuf>,
+    /// File length threshold in lines. Omit/null: 400; zero is literal.
     #[serde(default)]
     pub max_file_lines: Option<usize>,
+    /// Complexity threshold. Omit/null: 12; zero is literal.
     #[serde(default)]
     pub max_cyclomatic_complexity: Option<usize>,
+    /// Coverage warning threshold in percent. Omit/null: 80.0; zero is literal.
     #[serde(default)]
     pub coverage_warn_below: Option<f64>,
 }
@@ -60,29 +82,39 @@ impl From<AuditSummaryByInput> for AuditSummaryBy {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AuditSummaryInput {
+    /// Required explicit repository path despite optional schema shape. Omitted/null/empty/default/.. fail; . means server cwd.
     #[serde(default)]
     pub repo_root: Option<PathBuf>,
+    /// Group by crate/package (aliases), category, severity, metric or path.
     pub by: AuditSummaryByInput,
+    /// File length threshold. Omit/null: 400; zero is literal.
     #[serde(default)]
     pub max_file_lines: Option<usize>,
+    /// Complexity threshold. Omit/null: 12; zero is literal.
     #[serde(default)]
     pub max_cyclomatic_complexity: Option<usize>,
+    /// Coverage percentage warning threshold. Omit/null: 80.0; zero is literal.
     #[serde(default)]
     pub coverage_warn_below: Option<f64>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AuditMoveInput {
+    /// Source repo path. Preflight omission uses server startup cwd; apply requires explicit selection.
     #[serde(default)]
     pub repo_root: Option<PathBuf>,
+    /// Finding entity UUID, not the repository audit index.
     pub id: String,
+    /// Explicit destination workspace root; . means server cwd.
     pub to_workspace_root: String,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct AuditMoveJournalInput {
+    /// Source repo path; omission uses server startup cwd.
     #[serde(default)]
     pub repo_root: Option<PathBuf>,
+    /// Move journal UUID from audit_move_apply, not finding entity UUID.
     pub id: String,
 }
 
@@ -154,7 +186,7 @@ impl AuditServer {
 impl AuditServer {
     #[tool(
         name = "audit",
-        description = "Run a repository quality audit and return structured metrics and findings."
+        description = "Run a full repository audit, not a read-only inspection: creates/updates the audit index, syncs sources and persists an audit run; runs cargo check --all-targets, cargo test --lib --tests --no-fail-fast and optional cargo llvm-cov without timeout. repo_root requires an explicit path (. means server cwd); omitted/empty/default/.. fail. Omitted/null thresholds: max_file_lines=400, max_cyclomatic_complexity=12, coverage_warn_below=80 percent; zero is literal. Reads .audit.toml, which may enable external checks. Returns structured metrics/findings/run evidence."
     )]
     async fn audit(
         &self,
@@ -176,7 +208,7 @@ impl AuditServer {
 
     #[tool(
         name = "audit_summary",
-        description = "Run a repository quality audit and return grouped issue counts."
+        description = "Run the same full audit as audit, including command execution, index updates and persisted run; return grouped counts, not a cached summary. Explicit repo_root required. by supports crate/package (aliases), category, severity, metric, path; crate grouping uses cargo metadata."
     )]
     async fn audit_summary(
         &self,
@@ -200,7 +232,7 @@ impl AuditServer {
 
     #[tool(
         name = "audit_move_preflight",
-        description = "Read-only preflight plan for moving an audit repository root to another workspace store."
+        description = "Preflight a persisted finding entity UUID move; no move occurs. Omitted repo_root uses server startup cwd; destination must be explicit. Only finding entity folders are movable, not the repository audit index. Returns status ok/blocked and plan.blockers."
     )]
     async fn audit_move_preflight(
         &self,
@@ -230,7 +262,7 @@ impl AuditServer {
 
     #[tool(
         name = "audit_move_apply",
-        description = "Execute a supported audit move to another workspace store."
+        description = "Re-plan and move a supported finding between stores, with explicit repo_root/destination; blocked preflight fails. Retain journal identity/phase from the outcome for audit_move_resume/rollback; do not blindly replay apply."
     )]
     async fn audit_move_apply(
         &self,
@@ -271,7 +303,7 @@ impl AuditServer {
 
     #[tool(
         name = "audit_move_resume",
-        description = "Resume an interrupted audit move from a journal id."
+        description = "Resume an interrupted finding move using id as journal UUID, not finding UUID. Omitted repo_root uses server startup cwd. Returns journal_id/phase."
     )]
     async fn audit_move_resume(
         &self,
@@ -300,7 +332,7 @@ impl AuditServer {
 
     #[tool(
         name = "audit_move_rollback",
-        description = "Roll back an audit move from a journal id."
+        description = "Roll back a finding move using id as journal UUID, not finding UUID. Omitted repo_root uses server startup cwd. Returns journal_id/phase."
     )]
     async fn audit_move_rollback(
         &self,
