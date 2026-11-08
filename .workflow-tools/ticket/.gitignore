@@ -7,3 +7,14 @@ search_index/
 # Stable advisory lock files are retained to keep a consistent lock inode.
 .ticket-lock
 .ticket-generation
+.ticket-transaction.json
+.ticket-txn-*.stage
+.ticket-txn-*.backup
+.*.lock
+*.flock
+.*-lock
+*.tmp
+.*.tmp-*
+.tmp-*
+move-locks/
+scan_fingerprints.json
