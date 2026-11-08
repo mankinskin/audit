@@ -6,6 +6,12 @@ category, severity, metric, or path. Primary use case: run it against a
 repository before or during a review pass to surface quality issues without
 reading every file by hand.
 
+Complexity finding IDs include the file path, function name, and starting
+line and column. Distinct same-named methods or conditional definitions,
+including those on the same line, remain separate persisted findings.
+Unchanged source produces the same IDs across audit runs; moving a function
+changes its location-based ID.
+
 The audit also checks the repository root for non-empty `README.md`,
 `INSTALL.md`, and `CONTRIBUTING.md` files. The first version reports only
 missing or whitespace-empty files; it does not parse document sections or run

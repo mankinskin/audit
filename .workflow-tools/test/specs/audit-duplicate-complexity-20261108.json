@@ -1,0 +1,12 @@
+{
+  "id": "audit-duplicate-complexity-20261108",
+  "title": "Distinct same-named complexity findings persist without SQLite collision",
+  "command": "rtk bypass cargo test --manifest-path workflow-tools/Cargo.toml -p audit-api",
+  "detail": "From meta-workspace root. Criterion distinct-complexity-findings-persist: preserve both findings for distinct same-named methods/cfg functions (same or separate lines and nested modules), stable across repeated audits with SQLite read-back. Criterion pre-commit-audit-exit-zero: rebuild the audit CLI and run the exact requester-supplied hook command from the workspace root; exit 0 required.",
+  "links": {
+    "acceptance_criterion_ids": [
+      "distinct-complexity-findings-persist",
+      "pre-commit-audit-exit-zero"
+    ]
+  }
+}

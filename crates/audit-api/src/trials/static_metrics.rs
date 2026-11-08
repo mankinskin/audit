@@ -64,7 +64,10 @@ pub fn evaluate(
         .iter()
         .filter(|metric| metric.complexity > threshold)
         .map(|metric| AuditFinding {
-            id: format!("static_complexity:{}:{}", metric.path, metric.name),
+            id: format!(
+                "static_complexity:{}:{}:{}:{}",
+                metric.path, metric.name, metric.start_line, metric.start_column
+            ),
             category: "static_complexity".to_string(),
             severity: if metric.complexity >= threshold * 2 {
                 Severity::High
@@ -117,6 +120,7 @@ struct FunctionMetric {
     path: String,
     name: String,
     start_line: usize,
+    start_column: usize,
     end_line: usize,
     complexity: usize,
 }
@@ -135,6 +139,7 @@ fn collect_function_metrics(
                     path: file_path.to_string(),
                     name: function_name,
                     start_line: start_line(item_fn.span()),
+                    start_column: item_fn.span().start().column,
                     end_line: end_line(item_fn.span()),
                     complexity: complexity_for_block(&item_fn.block),
                 });
@@ -147,6 +152,7 @@ fn collect_function_metrics(
                             path: file_path.to_string(),
                             name: method_name,
                             start_line: start_line(method.span()),
+                            start_column: method.span().start().column,
                             end_line: end_line(method.span()),
                             complexity: complexity_for_block(&method.block),
                         });
@@ -225,5 +231,58 @@ impl<'ast> Visit<'ast> for ComplexityVisitor {
             self.complexity += 1;
         }
         visit::visit_expr_binary(self, node);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeSet;
+
+    use rusqlite::Connection;
+    use tempfile::tempdir;
+
+    use crate::{audit::audit, models::AuditConfig};
+
+    #[test]
+    fn audit_persists_same_named_complex_functions_without_unique_constraint_failure() {
+        for source in [
+            "struct A;\nstruct B;\nimpl A { fn check() { if true {} } }\nimpl B { fn check() { if true {} } }\n",
+            "struct A; struct B; impl A { fn check() { if true {} } } impl B { fn check() { if true {} } }\n",
+            "#[cfg(unix)] fn check() { if true {} } #[cfg(windows)] fn check() { if true {} }\n",
+            "mod nested { struct A; struct B; impl A { fn check() { if true {} } } impl B { fn check() { if true {} } } }\n",
+        ] {
+            let repo = tempdir().unwrap();
+            std::fs::write(repo.path().join("lib.rs"), source).unwrap();
+            let config = AuditConfig {
+                max_cyclomatic_complexity: 1,
+                ..AuditConfig::default()
+            };
+
+            let first = audit(repo.path(), config.clone()).expect("first audit succeeds");
+            let second = audit(repo.path(), config).expect("repeated audit succeeds");
+            let complexity_ids = |report: &crate::models::AuditReport| {
+                report
+                    .findings
+                    .iter()
+                    .filter(|finding| finding.category == "static_complexity")
+                    .map(|finding| finding.id.clone())
+                    .collect::<BTreeSet<_>>()
+            };
+            assert_eq!(first.metrics.static_metrics.high_complexity_functions, 2);
+            assert_eq!(complexity_ids(&first).len(), 2);
+            assert_eq!(complexity_ids(&first), complexity_ids(&second));
+
+            let connection = Connection::open(&second.index_database).unwrap();
+            for report in [&first, &second] {
+                let persisted: usize = connection
+                    .query_row(
+                        "SELECT COUNT(*) FROM audit_findings WHERE run_id = ?1 AND category = 'static_complexity'",
+                        [report.run.run_id],
+                        |row| row.get(0),
+                    )
+                    .unwrap();
+                assert_eq!(persisted, 2);
+            }
+        }
     }
 }
